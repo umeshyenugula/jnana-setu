@@ -44,6 +44,14 @@ type Config struct {
 	LLMMaxConcurrent   int
 	LLMEnableThinking  bool
 	LLMMaxPromptChars  int
+	// Module 6 chat orchestration (public widget endpoint).
+	ChatMaxMessageChars int
+	ChatHistoryLimit    int
+	ChatTopK            int
+	ChatMaxPromptChars  int
+	ChatFallbackText    string
+	ChatRetentionDays   int
+	ChatRateLimitPerMin int
 }
 
 // Load reads configuration from the process environment.
@@ -83,6 +91,13 @@ func Load() Config {
 		LLMMaxConcurrent:   envInt("LLM_MAX_CONCURRENT", 1),
 		LLMEnableThinking:  envBool("LLM_ENABLE_THINKING", false),
 		LLMMaxPromptChars:  envInt("LLM_MAX_PROMPT_CHARS", 12000),
+		ChatMaxMessageChars: envInt("CHAT_MAX_MESSAGE_CHARS", 2000),
+		ChatHistoryLimit:    envInt("CHAT_HISTORY_LIMIT", 10),
+		ChatTopK:            envInt("CHAT_TOP_K", 5),
+		ChatMaxPromptChars:  envInt("CHAT_MAX_PROMPT_CHARS", 8000),
+		ChatFallbackText:    envString("CHAT_FALLBACK_TEXT", ""),
+		ChatRetentionDays:   envInt("CHAT_RETENTION_DAYS", 90),
+		ChatRateLimitPerMin: envInt("CHAT_RATE_LIMIT_PER_MIN", 30),
 	}
 }
 

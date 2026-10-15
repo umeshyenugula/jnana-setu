@@ -34,6 +34,9 @@ Supported endpoints:
 - Module 5 inference, internal only (see `docs/MODULE5_INFERENCE.md` and `contracts/api/v1/inference.yaml`):
   - `POST /api/v1/internal/inference/generate` (header `X-Internal-Service-Token`, Module 6 only)
   - `GET /api/v1/internal/inference/health`, `GET /api/v1/internal/inference/ready` (no auth)
+- Module 6 chat, public widget API (see `docs/MODULE6_CHAT.md` and `contracts/api/v1/chat.yaml`):
+  - `POST /api/v1/chat`
+  - `GET /api/v1/chat/sessions/{sessionId}?widgetId=...`
 
 Env:
 ```

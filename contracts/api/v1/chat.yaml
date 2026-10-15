@@ -1,0 +1,117 @@
+openapi: 3.1.0
+info:
+  title: AI Knowledge Assistant API — Module 6 (Chat Orchestration, public)
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+# Public by design for anonymous website visitors. Protection comes from
+# server-side widget binding, origin allow-lists, rate limits, and opaque
+# sessions — never from browser-supplied tenant identifiers. There is no
+# tenant or organization field on this API.
+paths:
+  /api/v1/chat:
+    post:
+      summary: Send a customer message and receive a grounded answer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [widgetId, message]
+              additionalProperties: false
+              properties:
+                widgetId:
+                  type: string
+                  description: Public widget ID from the embed snippet
+                sessionId:
+                  type: string
+                  pattern: '^ses_[0-9a-f]{32}$'
+                  description: Opaque server-issued session; omit to start one
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: Customer message
+                idempotencyKey:
+                  type: string
+                  maxLength: 128
+                  description: Safe retry key; send with sessionId on retries
+      responses:
+        '200':
+          description: Answered, fallback, or temporarily-unavailable status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [sessionId, status, answer, sources]
+                    properties:
+                      sessionId:
+                        type: string
+                        description: Reuse on follow-up turns
+                      status:
+                        type: string
+                        enum: [answered, insufficient_evidence, temporarily_unavailable]
+                      answer: { type: string }
+                      sources:
+                        type: array
+                        items:
+                          type: object
+                          required: [documentId, versionId, chunkId, rank, excerpt]
+                          properties:
+                            documentId: { type: string, format: uuid }
+                            versionId: { type: string, format: uuid }
+                            chunkId: { type: string, format: uuid }
+                            rank: { type: integer }
+                            excerpt: { type: string, maxLength: 300 }
+                            sourceMeta: { type: object }
+                  meta:
+                    type: object
+                    properties:
+                      correlationId: { type: string }
+                      timestamp: { type: string, format: date-time }
+                      version: { type: string }
+                      path: { type: string }
+        '400': { description: Invalid request }
+        '403': { description: Website origin not allowed }
+        '404': { description: Widget or session not found }
+        '429': { description: Rate limit exhausted }
+  /api/v1/chat/sessions/{sessionId}:
+    get:
+      summary: Read persisted turns for a session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^ses_[0-9a-f]{32}$' }
+        - name: widgetId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Oldest-first turns bound to the session widget and tenant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      messages:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            role: { type: string, enum: [user, assistant] }
+                            content: { type: string }
+                            status: { type: string, enum: [ok, fallback] }
+                            sources: { type: array, items: { type: object } }
+                            createdAt: { type: string, format: date-time }
+        '404': { description: Session not found }

@@ -6,6 +6,7 @@ import (
 
 	"example.com/ai-knowledge-assistant/services/api/internal/api"
 	"example.com/ai-knowledge-assistant/services/api/internal/auth"
+	"example.com/ai-knowledge-assistant/services/api/internal/chat"
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
 	"example.com/ai-knowledge-assistant/services/api/internal/inference"
 	"example.com/ai-knowledge-assistant/services/api/internal/knowledge"
@@ -21,6 +22,7 @@ type Deps struct {
 	Processing *processing.Handlers
 	Retrieval  *retrieval.Handlers
 	Inference  *inference.Handlers
+	Chat       *chat.Handlers
 }
 
 func New(deps Deps) http.Handler {
@@ -321,6 +323,28 @@ func New(deps Deps) http.Handler {
 				return
 			}
 			deps.Inference.Readiness(w, r)
+
+		case len(rest) == 1 && rest[0] == "chat":
+			if deps.Chat == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "chat service is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Chat.Chat(w, r)
+
+		case len(rest) == 3 && rest[0] == "chat" && rest[1] == "sessions":
+			if deps.Chat == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "chat service is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Chat.History(w, r, rest[2])
 
 		default:
 			api.WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "The requested resource was not found.", api.CorrelationID(r.Context()), api.APIVersion)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"example.com/ai-knowledge-assistant/services/api/internal/auth"
+	"example.com/ai-knowledge-assistant/services/api/internal/chat"
 	"example.com/ai-knowledge-assistant/services/api/internal/config"
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
 	"example.com/ai-knowledge-assistant/services/api/internal/inference"
@@ -127,6 +128,29 @@ func main() {
 		Auth:    inference.InternalAuth{Token: cfg.InternalServiceToken},
 		Version: version.Version,
 	}
+
+	// Module 6: chat orchestration over Module 1 tenants, Module 4
+	// retrieval, Module 5 generation, and chat persistence. Without a
+	// database the memory store keeps the endpoint functional for
+	// development; conversations are not durable in that mode.
+	var chatStore chat.Store = chat.NewMemoryStore()
+	if pool != nil {
+		chatStore = chat.NewPostgresStore(pool)
+	}
+	chatCfg := chat.DefaultConfig()
+	chatCfg.MaxMessageChars = cfg.ChatMaxMessageChars
+	chatCfg.HistoryLimit = cfg.ChatHistoryLimit
+	chatCfg.RetrievalTopK = cfg.ChatTopK
+	chatCfg.MaxPromptChars = cfg.ChatMaxPromptChars
+	if strings.TrimSpace(cfg.ChatFallbackText) != "" {
+		chatCfg.FallbackText = cfg.ChatFallbackText
+	}
+	chatCfg.RetentionDays = cfg.ChatRetentionDays
+	chatCfg.RateLimitPerMin = cfg.ChatRateLimitPerMin
+	chatService := chat.NewService(chatCfg,
+		&chat.IdentityAdapter{Service: service},
+		retrievalService, inferenceService, chatStore)
+	chatHandlers := &chat.Handlers{Service: chatService, Version: version.Version}
 	verifier := auth.NewVerifier(auth.VerifierConfig{
 		URL:       cfg.SupabaseURL,
 		JWTSecret: cfg.SupabaseJWTSecret,
@@ -142,6 +166,7 @@ func main() {
 		Processing: processingHandlers,
 		Retrieval:  retrievalHandlers,
 		Inference:  inferenceHandlers,
+		Chat:       chatHandlers,
 	})
 
 	server := &http.Server{
