@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+coverage/
+*.exe
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Go
+*.test
+*.out
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,39 @@
+name: ai-knowledge-assistant
+
+services:
+  api:
+    build:
+      context: ../../services/api
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PORT: "8080"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-http}
+      EMBEDDING_WORKER_URL: ${EMBEDDING_WORKER_URL:-http://embeddings:8082}
+      PROCESSING_WORKERS: ${PROCESSING_WORKERS:-2}
+      CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-200}
+      CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-35}
+    restart: unless-stopped
+    depends_on:
+      - embeddings
+
+  embeddings:
+    build:
+      context: ../../services/embeddings
+      dockerfile: Dockerfile
+    environment:
+      EMBEDDING_MODEL_DIR: ${EMBEDDING_MODEL_DIR:-/models/all-MiniLM-L6-v2}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+    volumes:
+      - embedding-models:/models
+    restart: unless-stopped
+
+volumes:
+  embedding-models:
