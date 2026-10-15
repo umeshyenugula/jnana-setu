@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: AI Knowledge Assistant API — Module 4 (Retrieval Engine, internal)
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+# Private to trusted application services (Module 6). Authenticated with the
+# shared X-Internal-Service-Token, NOT with browser JWTs. There is no public
+# search API; arbitrary tenant IDs from browsers are never accepted.
+paths:
+  /api/v1/internal/retrieval/query:
+    post:
+      summary: Retrieve ranked evidence for a customer question (Module 6 only)
+      security:
+        - serviceToken: []
+      parameters:
+        - name: X-Internal-Service-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, query]
+              properties:
+                organizationId:
+                  type: string
+                  format: uuid
+                  description: Trusted tenant from Module 6 server-side resolution
+                query: { type: string, minLength: 1, maxLength: 2000 }
+                topK: { type: integer, minimum: 1, description: Bounded result count }
+                documentIds:
+                  type: array
+                  items: { type: string, format: uuid }
+                  maxItems: 50
+      responses:
+        '200':
+          description: Ranked evidence or explicit insufficient-evidence status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [status, evidence]
+                    properties:
+                      status: { type: string, enum: [results, insufficient_evidence] }
+                      evidence:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            rank: { type: integer }
+                            chunkId: { type: string, format: uuid }
+                            documentId: { type: string, format: uuid }
+                            versionId:
+                              type: string
+                              format: uuid
+                              description: Immutable indexed version
+                            text: { type: string }
+                            similarity:
+                              type: number
+                              description: Cosine similarity in [-1,1]; NOT a correctness probability
+                            distance:
+                              type: number
+                              description: pgvector cosine distance in [0,2]; lower is more relevant
+                            tokenCount: { type: integer }
+                            sourceMeta: { type: object, description: Actual page/section metadata where available }
+                      topK: { type: integer }
+                      returned: { type: integer }
+                      minSimilarity: { type: number }
+                      model: { type: string }
+                      dimensions: { type: integer }
+                  meta:
+                    type: object
+                    properties:
+                      correlationId: { type: string }
+                      timestamp: { type: string, format: date-time }
+                      version: { type: string }
+                      path: { type: string }
+components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token
