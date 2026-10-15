@@ -31,6 +31,9 @@ Supported endpoints:
 - Local embeddings worker: `services/embeddings` (`POST /embed`, `GET /health`, `GET /ready` on loopback only).
 - Module 4 retrieval, internal only (see `docs/MODULE4_RETRIEVAL.md` and `contracts/api/v1/retrieval.yaml`):
   - `POST /api/v1/internal/retrieval/query` (header `X-Internal-Service-Token`, Module 6 only)
+- Module 5 inference, internal only (see `docs/MODULE5_INFERENCE.md` and `contracts/api/v1/inference.yaml`):
+  - `POST /api/v1/internal/inference/generate` (header `X-Internal-Service-Token`, Module 6 only)
+  - `GET /api/v1/internal/inference/health`, `GET /api/v1/internal/inference/ready` (no auth)
 
 Env:
 ```

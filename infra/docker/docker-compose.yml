@@ -20,9 +20,15 @@ services:
       PROCESSING_WORKERS: ${PROCESSING_WORKERS:-2}
       CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-200}
       CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-35}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
+      LLAMA_CPP_BASE_URL: ${LLAMA_CPP_BASE_URL:-http://llm:8081}
+      LLM_MODEL: ${LLM_MODEL:-qwen3-4b}
+      LLM_MAX_CONCURRENT: ${LLM_MAX_CONCURRENT:-1}
     restart: unless-stopped
     depends_on:
       - embeddings
+      - llm
 
   embeddings:
     build:
@@ -34,6 +40,31 @@ services:
     volumes:
       - embedding-models:/models
     restart: unless-stopped
+
+  # Module 5: local llama.cpp server (Qwen3-4B GGUF). Private service network
+  # only — no published ports. No restart-on-failure policy: a crash must be
+  # investigated, not looped. Mount models dir read-only; weights are never
+  # committed (see docs/MODULE5_INFERENCE.md).
+  llm:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    command:
+      - -m
+      - /models/llm/${LLM_MODEL_FILE:-qwen3-4b-Q4_K_M.gguf}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8081"
+      - --ctx-size
+      - ${LLM_CONTEXT_WINDOW:-4096}
+      - --n-predict
+      - ${LLM_MAX_OUTPUT_TOKENS:-512}
+    environment:
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+    volumes:
+      - ./models/llm:/models/llm:ro
+    expose:
+      - "8081"
+    restart: "no"
 
 volumes:
   embedding-models:

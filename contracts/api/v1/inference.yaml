@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: AI Knowledge Assistant API — Module 5 (Local Inference, internal)
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+# Private to trusted application services (Module 6). Authenticated with the
+# shared X-Internal-Service-Token, NOT with browser JWTs. Generation runs on
+# the local llama.cpp runtime only; no hosted provider is ever called.
+# Streaming is intentionally not offered: the adapter validates output
+# (including reasoning-marker stripping) before responding.
+paths:
+  /api/v1/internal/inference/generate:
+    post:
+      summary: Generate text from prepared messages (Module 6 only)
+      security:
+        - serviceToken: []
+      parameters:
+        - name: X-Internal-Service-Token
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              additionalProperties: false
+              properties:
+                messages:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [role, content]
+                    additionalProperties: false
+                    properties:
+                      role: { type: string, enum: [system, user, assistant] }
+                      content: { type: string, minLength: 1 }
+                settings:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    temperature: { type: number, minimum: 0, maximum: 2 }
+                    topP: { type: number, exclusiveMinimum: 0, maximum: 1 }
+                    maxTokens: { type: integer, minimum: 1 }
+                    stop:
+                      type: array
+                      maxItems: 4
+                      items: { type: string, minLength: 1, maxLength: 50 }
+      responses:
+        '200':
+          description: Generated text in a predictable response field
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [text, finishReason, model]
+                    properties:
+                      text: { type: string }
+                      finishReason: { type: string, enum: [stop, length, error] }
+                      promptTokens: { type: integer }
+                      completionTokens: { type: integer }
+                      model: { type: string }
+                      thinkingStripped: { type: boolean }
+                  meta:
+                    type: object
+                    properties:
+                      correlationId: { type: string }
+                      timestamp: { type: string, format: date-time }
+                      version: { type: string }
+                      path: { type: string }
+        '400': { description: Invalid request }
+        '401': { description: Invalid or missing service credentials }
+        '429': { description: Model busy (MODEL_OVERLOADED) }
+        '502': { description: Runtime failure }
+        '503': { description: Model not ready }
+        '504': { description: Generation timed out }
+  /api/v1/internal/inference/health:
+    get:
+      summary: Inference service liveness and counters (no auth)
+      responses:
+        '200': { description: Service is up }
+  /api/v1/internal/inference/ready:
+    get:
+      summary: Model-loaded readiness (no auth)
+      responses:
+        '200': { description: Model loaded and ready }
+        '503': { description: Model not ready (MODEL_NOT_READY) }
+components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Token

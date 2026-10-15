@@ -5,13 +5,16 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"example.com/ai-knowledge-assistant/services/api/internal/auth"
 	"example.com/ai-knowledge-assistant/services/api/internal/config"
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
+	"example.com/ai-knowledge-assistant/services/api/internal/inference"
 	"example.com/ai-knowledge-assistant/services/api/internal/knowledge"
 	"example.com/ai-knowledge-assistant/services/api/internal/processing"
 	"example.com/ai-knowledge-assistant/services/api/internal/retrieval"
@@ -93,6 +96,37 @@ func main() {
 		Auth:    retrieval.InternalAuth{Token: cfg.InternalServiceToken},
 		Version: version.Version,
 	}
+
+	// Module 5: local inference. LLM_PROVIDER=mock selects the deterministic
+	// stand-in (tests/Module 6 development without model weights); anything
+	// else uses the local llama.cpp runtime over loopback/private network.
+	// Hosted inference is never used.
+	var llmRuntime inference.Runtime = &inference.MockRuntime{}
+	if strings.ToLower(strings.TrimSpace(cfg.LLMProvider)) != "mock" {
+		thinking := cfg.LLMEnableThinking
+		llmRuntime = inference.NewLlamaCppRuntime(inference.LlamaCppConfig{
+			BaseURL:        cfg.LlamaCppBaseURL,
+			Model:          cfg.LLMModel,
+			EnableThinking: &thinking,
+		})
+	}
+	inferenceCfg := inference.DefaultConfig()
+	inferenceCfg.Model = cfg.LLMModel
+	inferenceCfg.RequestTimeout = time.Duration(cfg.LLMRequestTimeoutS) * time.Second
+	inferenceCfg.MaxConcurrent = cfg.LLMMaxConcurrent
+	inferenceCfg.Defaults = inference.ResolvedSettings{
+		Temperature: cfg.LLMTemperature,
+		TopP:        cfg.LLMTopP,
+		MaxTokens:   cfg.LLMMaxOutputTokens,
+	}
+	inferenceCfg.Policy.MaxTokens = cfg.LLMMaxOutputTokens
+	inferenceCfg.Policy.MaxPromptChars = cfg.LLMMaxPromptChars
+	inferenceService := inference.NewService(inferenceCfg, llmRuntime)
+	inferenceHandlers := &inference.Handlers{
+		Service: inferenceService,
+		Auth:    inference.InternalAuth{Token: cfg.InternalServiceToken},
+		Version: version.Version,
+	}
 	verifier := auth.NewVerifier(auth.VerifierConfig{
 		URL:       cfg.SupabaseURL,
 		JWTSecret: cfg.SupabaseJWTSecret,
@@ -107,6 +141,7 @@ func main() {
 		Knowledge:  knowledgeHandlers,
 		Processing: processingHandlers,
 		Retrieval:  retrievalHandlers,
+		Inference:  inferenceHandlers,
 	})
 
 	server := &http.Server{
@@ -118,11 +153,29 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
-	logger.Info("starting api", "addr", server.Addr, "env", cfg.AppEnv, "version", version.Version)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Error("api stopped", "error", err)
-		os.Exit(1)
+	go func() {
+		logger.Info("starting api", "addr", server.Addr, "env", cfg.AppEnv, "version", version.Version)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("api stopped", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	logger.Info("shutting down api")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("http shutdown failed", "error", err)
 	}
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer drainCancel()
+	if err := inferenceService.Shutdown(drainCtx); err != nil {
+		logger.Error("inference drain failed", "error", err)
+	}
+	logger.Info("api stopped")
 }
 
 func itoa(v int) string {

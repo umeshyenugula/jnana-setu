@@ -7,6 +7,7 @@ import (
 	"example.com/ai-knowledge-assistant/services/api/internal/api"
 	"example.com/ai-knowledge-assistant/services/api/internal/auth"
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
+	"example.com/ai-knowledge-assistant/services/api/internal/inference"
 	"example.com/ai-knowledge-assistant/services/api/internal/knowledge"
 	"example.com/ai-knowledge-assistant/services/api/internal/processing"
 	"example.com/ai-knowledge-assistant/services/api/internal/retrieval"
@@ -19,6 +20,7 @@ type Deps struct {
 	Knowledge  *knowledge.Handlers
 	Processing *processing.Handlers
 	Retrieval  *retrieval.Handlers
+	Inference  *inference.Handlers
 }
 
 func New(deps Deps) http.Handler {
@@ -286,6 +288,39 @@ func New(deps Deps) http.Handler {
 				return
 			}
 			deps.Retrieval.Query(w, r)
+
+		case len(rest) == 3 && rest[0] == "internal" && rest[1] == "inference" && rest[2] == "generate":
+			if deps.Inference == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "inference service is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Inference.Generate(w, r)
+
+		case len(rest) == 3 && rest[0] == "internal" && rest[1] == "inference" && rest[2] == "health":
+			if deps.Inference == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "inference service is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Inference.Health(w, r)
+
+		case len(rest) == 3 && rest[0] == "internal" && rest[1] == "inference" && rest[2] == "ready":
+			if deps.Inference == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "inference service is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Inference.Readiness(w, r)
 
 		default:
 			api.WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "The requested resource was not found.", api.CorrelationID(r.Context()), api.APIVersion)

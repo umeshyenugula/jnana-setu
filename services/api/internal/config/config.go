@@ -32,6 +32,18 @@ type Config struct {
 	RetrievalMinSimilarity float64
 	RetrievalMaxTokens     int
 	RetrievalEmbedTimeoutS int
+	// Module 5 local inference (internal service-to-service only).
+	LLMProvider        string
+	LlamaCppBaseURL    string
+	LLMModel           string
+	LLMContextWindow   int
+	LLMMaxOutputTokens int
+	LLMTemperature     float64
+	LLMTopP            float64
+	LLMRequestTimeoutS int
+	LLMMaxConcurrent   int
+	LLMEnableThinking  bool
+	LLMMaxPromptChars  int
 }
 
 // Load reads configuration from the process environment.
@@ -60,6 +72,17 @@ func Load() Config {
 		RetrievalMinSimilarity: envFloat("RETRIEVAL_MIN_SIMILARITY", 0.1),
 		RetrievalMaxTokens:     envInt("RETRIEVAL_MAX_EVIDENCE_TOKENS", 4000),
 		RetrievalEmbedTimeoutS: envInt("RETRIEVAL_EMBED_TIMEOUT_S", 30),
+		LLMProvider:        envString("LLM_PROVIDER", "llamacpp"),
+		LlamaCppBaseURL:    envString("LLAMA_CPP_BASE_URL", "http://localhost:8081"),
+		LLMModel:           envString("LLM_MODEL", "qwen3-4b"),
+		LLMContextWindow:   envInt("LLM_CONTEXT_WINDOW", 4096),
+		LLMMaxOutputTokens: envInt("LLM_MAX_OUTPUT_TOKENS", 512),
+		LLMTemperature:     envFloat("LLM_TEMPERATURE", 0.3),
+		LLMTopP:            envFloat("LLM_TOP_P", 0.9),
+		LLMRequestTimeoutS: envInt("LLM_REQUEST_TIMEOUT_S", 120),
+		LLMMaxConcurrent:   envInt("LLM_MAX_CONCURRENT", 1),
+		LLMEnableThinking:  envBool("LLM_ENABLE_THINKING", false),
+		LLMMaxPromptChars:  envInt("LLM_MAX_PROMPT_CHARS", 12000),
 	}
 }
 
@@ -88,6 +111,18 @@ func envFloat(key string, fallback float64) float64 {
 		return fallback
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func envBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}
