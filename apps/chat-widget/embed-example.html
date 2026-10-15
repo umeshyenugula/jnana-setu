@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Separate test website for the embeddable widget (acceptance criterion 5).
+  1. Start the widget app:  cd apps/chat-widget && npm run dev   (http://localhost:5174)
+  2. Start the API:          cd services/api && go run ./cmd/api (http://localhost:8080)
+  3. Serve this file over http (file:// cannot postMessage reliably in all browsers):
+       npx serve .   (or: python3 -m http.server 5500)
+  4. Replace PUBLIC_WIDGET_ID below with a real widget's public ID. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test website — chat widget embed</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Acme test website</h1>
+    <p>This page embeds the JñānaSetu chat widget via the loader snippet.</p>
+    <script
+      src="http://localhost:5174/loader.js"
+      data-widget-id="PUBLIC_WIDGET_ID"
+      data-api-base="http://localhost:8080"
+      defer
+    ></script>
+  </body>
+</html>
