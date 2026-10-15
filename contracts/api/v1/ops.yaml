@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: AI Knowledge Assistant API — Module 8 (Operations)
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+# Platform liveness/readiness are public and minimal. Metrics exposition is
+# gated by the internal service token (Prometheus scrapes with a bearer
+# token) and must never be exposed without access controls.
+paths:
+  /api/v1/health:
+    get:
+      summary: Liveness — the process is alive and responsive
+      responses:
+        '200':
+          description: Alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string }
+                      service: { type: string }
+                      version: { type: string }
+  /api/v1/ready:
+    get:
+      summary: Readiness — mandatory dependencies healthy, optional reported
+      responses:
+        '200':
+          description: Ready or degraded (optional dependency down)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    required: [status, service, dependencies]
+                    properties:
+                      status: { type: string, enum: [ready, degraded, not_ready] }
+                      service: { type: string }
+                      dependencies:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            mandatory: { type: boolean }
+                            ok: { type: boolean }
+                            latencyMs: { type: integer }
+        '503':
+          description: Not ready — a mandatory dependency (database) is unreachable
+  /api/v1/metrics:
+    get:
+      summary: Prometheus text exposition (service token required)
+      security:
+        - serviceToken: []
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema: { type: string, description: "Bearer <INTERNAL_SERVICE_TOKEN>" }
+      responses:
+        '200':
+          description: Prometheus text format 0.0.4
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401': { description: Missing or invalid service credentials }
+components:
+  securitySchemes:
+    serviceToken:
+      type: http
+      scheme: bearer

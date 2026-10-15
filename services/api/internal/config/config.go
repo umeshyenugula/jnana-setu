@@ -52,6 +52,12 @@ type Config struct {
 	ChatFallbackText    string
 	ChatRetentionDays   int
 	ChatRateLimitPerMin int
+	// Module 8 observability and operations.
+	ObsLogLevel        string
+	ObsHealthTimeoutS  int
+	OtelEnabled        bool
+	OtelEndpoint       string
+	OtelSampleRatio    float64
 }
 
 // Load reads configuration from the process environment.
@@ -98,6 +104,11 @@ func Load() Config {
 		ChatFallbackText:    envString("CHAT_FALLBACK_TEXT", ""),
 		ChatRetentionDays:   envInt("CHAT_RETENTION_DAYS", 90),
 		ChatRateLimitPerMin: envInt("CHAT_RATE_LIMIT_PER_MIN", 30),
+		ObsLogLevel:        envString("OBS_LOG_LEVEL", "info"),
+		ObsHealthTimeoutS:  envInt("OBS_HEALTH_TIMEOUT_S", 5),
+		OtelEnabled:        envBool("OTEL_ENABLED", false),
+		OtelEndpoint:       envString("OTEL_ENDPOINT", "http://localhost:4318"),
+		OtelSampleRatio:    envFloat("OTEL_SAMPLE_RATIO", 0.1),
 	}
 }
 

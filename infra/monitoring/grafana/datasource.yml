@@ -1,0 +1,11 @@
+# Grafana datasource provisioning: the Prometheus server scraped in
+# prometheus.yml. Mounted at /etc/grafana/provisioning/datasources/.
+apiVersion: 1
+
+datasources:
+  - name: prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true

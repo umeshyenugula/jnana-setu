@@ -1,0 +1,62 @@
+# Alert rules for JñānaSetu (Module 8). All thresholds are starting points;
+# tune them against a week of production traffic. During local development
+# and model cold starts these rules are expected to be noisy — the
+# monitoring profile is optional and the API runs fine without it.
+
+groups:
+  - name: jnana-api
+    interval: 30s
+    rules:
+      - alert: APIHighFailureRate
+        expr: |
+          sum by (route) (
+            rate(http_requests_total{status="5xx"}[5m])
+          )
+          /
+          clamp_min(sum by (route) (rate(http_requests_total[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "High 5xx rate on {{ $labels.route }}"
+          description: "More than 5% of requests on {{ $labels.route }} failed over 5 minutes."
+
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (route, le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 5
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "p95 latency above 5s on {{ $labels.route }}"
+          description: "95th percentile latency exceeded 5 seconds for 10 minutes. Local model cold starts can trip this; check llm health before paging."
+
+      - alert: PlatformNotReady
+        expr: platform_ready == 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Mandatory dependency unhealthy"
+          description: "GET /api/v1/ready reports not_ready: the database (mandatory) is unreachable."
+
+      - alert: LLMNotReady
+        expr: increase(llm_model_load_errors_total[10m]) > 0
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Local model failing readiness"
+          description: "llama.cpp readiness checks failed in the last 10 minutes. Check the llm container and model mount."
+
+      - alert: IngestionFailuresGrowing
+        expr: increase(ingestion_jobs{status="failed"}[1h]) > 0
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Ingestion jobs failing"
+          description: "Failed ingestion jobs increased in the last hour. Inspect processing logs with the job correlation IDs."

@@ -10,6 +10,7 @@ import (
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
 	"example.com/ai-knowledge-assistant/services/api/internal/inference"
 	"example.com/ai-knowledge-assistant/services/api/internal/knowledge"
+	"example.com/ai-knowledge-assistant/services/api/internal/observability"
 	"example.com/ai-knowledge-assistant/services/api/internal/processing"
 	"example.com/ai-knowledge-assistant/services/api/internal/retrieval"
 )
@@ -23,6 +24,8 @@ type Deps struct {
 	Retrieval  *retrieval.Handlers
 	Inference  *inference.Handlers
 	Chat       *chat.Handlers
+	Ops        *observability.Handlers
+	Obs        *observability.Stack
 }
 
 func New(deps Deps) http.Handler {
@@ -346,12 +349,37 @@ func New(deps Deps) http.Handler {
 			}
 			deps.Chat.History(w, r, rest[2])
 
+		case len(rest) == 1 && rest[0] == "ready":
+			if deps.Ops == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "observability is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Ops.Ready(w, r)
+
+		case len(rest) == 1 && rest[0] == "metrics":
+			if deps.Ops == nil {
+				api.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "observability is not configured", api.CorrelationID(r.Context()), api.APIVersion)
+				return
+			}
+			if r.Method != http.MethodGet {
+				methodNotAllowed(w, r)
+				return
+			}
+			deps.Ops.Metrics(w, r)
+
 		default:
 			api.WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "The requested resource was not found.", api.CorrelationID(r.Context()), api.APIVersion)
 		}
 	})
 
 	var handler http.Handler = root
+	if deps.Obs != nil {
+		handler = deps.Obs.Wrap(handler)
+	}
 	handler = api.RecoveryMiddleware(deps.Version, handler)
 	handler = api.CorrelationMiddleware(handler)
 	return handler

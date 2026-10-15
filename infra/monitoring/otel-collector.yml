@@ -1,0 +1,22 @@
+# Minimal self-hosted OpenTelemetry collector (Module 8, optional).
+# Receives OTLP/HTTP+JSON spans from the API when OTEL_ENABLED=1 and logs
+# them. Extend with exporters (e.g. Jaeger, Tempo) per deployment needs.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  logging:
+    loglevel: info
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging]

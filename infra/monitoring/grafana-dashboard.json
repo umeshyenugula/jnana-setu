@@ -1,0 +1,74 @@
+{
+  "title": "JñānaSetu Platform",
+  "uid": "jnana-platform",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request rate by route",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (route) (rate(http_requests_total[5m]))", "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error rate (5xx share)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=\"5xx\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 0.001)",
+          "legendFormat": "5xx share"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Latency p50 / p95",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Platform readiness",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "platform_ready", "legendFormat": "ready" }]
+    },
+    {
+      "id": 5,
+      "title": "Ingestion jobs by status",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "ingestion_jobs", "legendFormat": "{{status}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Local inference requests",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(llm_requests_total[5m])", "legendFormat": "requests/s" },
+        { "expr": "rate(llm_overloaded_total[5m])", "legendFormat": "overloaded/s" },
+        { "expr": "rate(llm_timeouts_total[5m])", "legendFormat": "timeouts/s" }
+      ]
+    }
+  ]
+}

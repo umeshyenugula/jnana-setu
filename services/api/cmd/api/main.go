@@ -17,6 +17,7 @@ import (
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
 	"example.com/ai-knowledge-assistant/services/api/internal/inference"
 	"example.com/ai-knowledge-assistant/services/api/internal/knowledge"
+	"example.com/ai-knowledge-assistant/services/api/internal/observability"
 	"example.com/ai-knowledge-assistant/services/api/internal/processing"
 	"example.com/ai-knowledge-assistant/services/api/internal/retrieval"
 	"example.com/ai-knowledge-assistant/services/api/internal/router"
@@ -151,6 +152,102 @@ func main() {
 		&chat.IdentityAdapter{Service: service},
 		retrievalService, inferenceService, chatStore)
 	chatHandlers := &chat.Handlers{Service: chatService, Version: version.Version}
+
+	// Module 8: observability. All instrumentation is read-only and
+	// fail-safe: no business logic is modified, and monitoring failures
+	// can neither crash the API nor bypass authorization.
+	obsLog := observability.NewLogger("api", cfg.AppEnv, cfg.ObsLogLevel)
+	obsReg := observability.NewRegistry()
+	obsInst := observability.NewInstruments(obsReg)
+	var otelExporter *observability.OTLPExporter
+	if cfg.OtelEnabled {
+		otelExporter = &observability.OTLPExporter{Endpoint: cfg.OtelEndpoint, Service: "api"}
+	}
+	var otelExp observability.Exporter
+	if otelExporter != nil {
+		otelExp = otelExporter
+	}
+	tracer := observability.NewTracer(cfg.OtelSampleRatio, otelExp)
+	readyGauge := obsReg.RegisterGauge("platform_ready",
+		"Platform readiness: 1 when mandatory dependencies are healthy.", observability.LabelService)
+	obsChecks := []observability.Check{
+		{
+			Name: "db", Mandatory: true,
+			Probe: func(ctx context.Context) error {
+				if pool == nil {
+					return nil // memory-store dev mode: nothing to probe
+				}
+				pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				defer cancel()
+				return pool.Ping(pctx)
+			},
+		},
+		{
+			Name: "embeddings", Mandatory: false,
+			Probe: func(ctx context.Context) error {
+				pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				defer cancel()
+				return embedder.Health(pctx)
+			},
+		},
+		{
+			Name: "llm", Mandatory: false,
+			Probe: func(ctx context.Context) error {
+				pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				defer cancel()
+				return llmRuntime.Ready(pctx)
+			},
+		},
+	}
+	obsChecker := observability.NewChecker("api", obsChecks,
+		2*time.Second, time.Duration(cfg.ObsHealthTimeoutS)*time.Second, readyGauge)
+	obsHandlers := &observability.Handlers{
+		Version: version.Version, Checker: obsChecker, Reg: obsReg,
+		Token: cfg.InternalServiceToken,
+	}
+	observability.RegisterInferenceCollector(obsReg, func() observability.InferenceSnapshot {
+		snap := inferenceService.Metrics().Snapshot()
+		out := observability.InferenceSnapshot{Failures: map[string]int64{}}
+		out.Requests, _ = snap["requests"].(int64)
+		out.Success, _ = snap["success"].(int64)
+		out.Overloaded, _ = snap["overloaded"].(int64)
+		out.Timeouts, _ = snap["timeouts"].(int64)
+		out.PromptTokens, _ = snap["promptTokens"].(int64)
+		out.CompletionTokens, _ = snap["completionTokens"].(int64)
+		out.ModelLoadErrors, _ = snap["modelLoadErrors"].(int64)
+		if fm, ok := snap["failures"].(map[string]int64); ok {
+			out.Failures = fm
+		}
+		return out
+	})
+	if pool != nil {
+		dbPool := pool
+		observability.RegisterIngestionCollector(obsReg, func(ctx context.Context) (map[string]int64, error) {
+			rows, err := dbPool.Query(ctx, `select status, count(*) from public.ingestion_jobs group by status`)
+			if err != nil {
+				return nil, err
+			}
+			defer rows.Close()
+			counts := map[string]int64{}
+			for rows.Next() {
+				var status string
+				var n int64
+				if err := rows.Scan(&status, &n); err != nil {
+					return nil, err
+				}
+				counts[status] = n
+			}
+			return counts, rows.Err()
+		})
+	}
+	var auditSink observability.Emitter = &observability.LogEmitter{Logger: obsLog}
+	if pool != nil {
+		auditSink = &observability.PostgresEmitter{Pool: pool}
+	}
+	_ = auditSink
+	obsLog.Event(context.Background(), "api.start",
+		slog.String("version", version.Version),
+		slog.Bool("otel_enabled", cfg.OtelEnabled))
 	verifier := auth.NewVerifier(auth.VerifierConfig{
 		URL:       cfg.SupabaseURL,
 		JWTSecret: cfg.SupabaseJWTSecret,
@@ -167,6 +264,8 @@ func main() {
 		Retrieval:  retrievalHandlers,
 		Inference:  inferenceHandlers,
 		Chat:       chatHandlers,
+		Ops:        obsHandlers,
+		Obs:        &observability.Stack{Log: obsLog, Inst: obsInst, Tracer: tracer},
 	})
 
 	server := &http.Server{

@@ -1,0 +1,9 @@
+# Grafana dashboard provisioning. Mounted at
+# /etc/grafana/provisioning/dashboards/.
+apiVersion: 1
+
+providers:
+  - name: "JñānaSetu"
+    type: file
+    options:
+      path: /etc/grafana/dashboards

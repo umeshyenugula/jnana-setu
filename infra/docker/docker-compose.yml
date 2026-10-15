@@ -66,5 +66,46 @@ services:
       - "8081"
     restart: "no"
 
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    profiles: [monitoring]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ../../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ../../monitoring/api_token:/etc/prometheus/api_token:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    profiles: [monitoring]
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../../monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ../../monitoring/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ../../monitoring/grafana-dashboard.json:/etc/grafana/dashboards/jnana-platform.json:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.104.0
+    profiles: [monitoring]
+    command: ["--config=/etc/otel/otel-collector.yml"]
+    ports:
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ../../monitoring/otel-collector.yml:/etc/otel/otel-collector.yml:ro
+    restart: unless-stopped
+
 volumes:
   embedding-models:
+  grafana-data:

@@ -37,6 +37,9 @@ Supported endpoints:
 - Module 6 chat, public widget API (see `docs/MODULE6_CHAT.md` and `contracts/api/v1/chat.yaml`):
   - `POST /api/v1/chat`
   - `GET /api/v1/chat/sessions/{sessionId}?widgetId=...`
+- Module 8 operations (see `docs/MODULE8_OBSERVABILITY.md` and `contracts/api/v1/ops.yaml`):
+  - `GET /api/v1/ready` (public, minimal)
+  - `GET /api/v1/metrics` (header `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>`)
 
 Env:
 ```
