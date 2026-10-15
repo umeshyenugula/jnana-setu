@@ -51,7 +51,7 @@ RETRIEVAL_MAX_EVIDENCE_TOKENS=4000 # total budget protection
 RETRIEVAL_EMBED_TIMEOUT_S=30
 ```
 
-Embedder reused from Module 3 (`EMBEDDING_PROVIDER`, `EMBEDDING_WORKER_URL`).
+Embedder is always the real Module 3 local HTTP worker (`EMBEDDING_WORKER_URL`); no stub path exists in production.
 
 ## Calibrating `RETRIEVAL_MIN_SIMILARITY`
 
@@ -79,7 +79,7 @@ overlapping) + 2 absent-knowledge cases.
 Integration test needing live Supabase (`TestPostgresRepositoryLive`,
 `TEST_SUPABASE_DB_URL`, migrations 0001–0004 + indexed chunks) is documented
 and skipped in CI. End-to-end relevance with real MiniLM weights requires the
-Module 3 worker (`EMBEDDING_PROVIDER=http`) and is manual until then.
+Module 3 worker running and is manual until then.
 
 ## Module 6 integration
 

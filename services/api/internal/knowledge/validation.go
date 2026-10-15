@@ -10,9 +10,23 @@ import (
 
 // Limits (also documented in README + docs/MODULE2_KNOWLEDGE.md).
 const (
-	MaxUploadBytes = 10 << 20 // 10 MiB per file / text submission
-	MaxTextChars   = 200_000  // ~200k chars per text submission/version
+	DefaultMaxUploadBytes = 10 << 20 // 10 MiB per file / text submission
+	MaxTextChars          = 200_000  // ~200k chars per text submission/version
 )
+
+// MaxUploadBytes is the active cap, set once at startup from
+// KNOWLEDGE_MAX_UPLOAD_MB via ConfigureLimits. Tests run the default.
+var MaxUploadBytes = DefaultMaxUploadBytes
+
+// ConfigureLimits applies the operator-chosen upload cap (MiB). Values
+// outside 1..100 MiB fall back to the default. Call once from main.
+func ConfigureLimits(maxUploadMB int) {
+	if maxUploadMB < 1 || maxUploadMB > 100 {
+		MaxUploadBytes = DefaultMaxUploadBytes
+		return
+	}
+	MaxUploadBytes = maxUploadMB << 20
+}
 
 var allowedExtensions = map[string]string{
 	".txt":  "text/plain",

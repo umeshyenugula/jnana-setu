@@ -2,17 +2,18 @@ import { describe, expect, it } from "vitest";
 import { buildEmbedSnippet, widgetAppUrl } from "./snippet";
 
 describe("embed snippet", () => {
-  it("builds a loader snippet with the public widget ID", () => {
-    const snippet = buildEmbedSnippet({ widgetHost: "https://widget.example.com/", widgetId: "wdg_abc" });
+  it("builds a loader snippet with the public widget ID and API base", () => {
+    const snippet = buildEmbedSnippet({ widgetHost: "https://widget.example.com/", widgetId: "wdg_abc", apiBase: "https://api.example.com/" });
     expect(snippet).toBe(
-      '<script src="https://widget.example.com/loader.js" data-widget-id="wdg_abc" defer></script>',
+      '<script src="https://widget.example.com/loader.js" data-widget-id="wdg_abc" data-api-base="https://api.example.com" defer></script>',
     );
   });
 
   it("strips attribute-breaking quotes from the widget ID", () => {
-    const snippet = buildEmbedSnippet({ widgetHost: "https://w.example.com", widgetId: 'a"b' });
+    const snippet = buildEmbedSnippet({ widgetHost: "https://w.example.com", widgetId: 'a"b', apiBase: "https://api.example.com" });
     expect(snippet).not.toContain('"b');
     expect(snippet).toContain("data-widget-id=");
+    expect(snippet).toContain("data-api-base=");
   });
 
   it("builds the iframe URL with encoded parameters", () => {

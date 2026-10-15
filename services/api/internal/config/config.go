@@ -19,12 +19,12 @@ type Config struct {
 	SupabaseJWTAudience  string
 	KnowledgeMaxUploadMB int
 	// Module 3 document processing & local embeddings.
-	EmbeddingProvider   string
 	EmbeddingWorkerURL  string
 	EmbeddingModelDir   string
 	ProcessingWorkers   int
 	ChunkTargetTokens   int
 	ChunkOverlapTokens  int
+	ProcessingRelayIntervalS int
 	// Module 4 retrieval engine (internal service-to-service only).
 	InternalServiceToken   string
 	RetrievalTopK          int
@@ -33,7 +33,6 @@ type Config struct {
 	RetrievalMaxTokens     int
 	RetrievalEmbedTimeoutS int
 	// Module 5 local inference (internal service-to-service only).
-	LLMProvider        string
 	LlamaCppBaseURL    string
 	LLMModel           string
 	LLMContextWindow   int
@@ -74,19 +73,18 @@ func Load() Config {
 		SupabaseJWTIssuer:   os.Getenv("SUPABASE_JWT_ISSUER"),
 		SupabaseJWTAudience: envString("SUPABASE_JWT_AUDIENCE", "authenticated"),
 		KnowledgeMaxUploadMB: envInt("KNOWLEDGE_MAX_UPLOAD_MB", 10),
-		EmbeddingProvider:   envString("EMBEDDING_PROVIDER", "http"),
 		EmbeddingWorkerURL:  envString("EMBEDDING_WORKER_URL", "http://127.0.0.1:8082"),
 		EmbeddingModelDir:   envString("EMBEDDING_MODEL_DIR", "./models/all-MiniLM-L6-v2"),
 		ProcessingWorkers:   envInt("PROCESSING_WORKERS", 2),
 		ChunkTargetTokens:   envInt("CHUNK_TARGET_TOKENS", 200),
 		ChunkOverlapTokens:  envInt("CHUNK_OVERLAP_TOKENS", 35),
+		ProcessingRelayIntervalS: envInt("PROCESSING_RELAY_INTERVAL_S", 10),
 		InternalServiceToken:   os.Getenv("INTERNAL_SERVICE_TOKEN"),
 		RetrievalTopK:          envInt("RETRIEVAL_TOP_K", 5),
 		RetrievalMaxTopK:       envInt("RETRIEVAL_MAX_TOP_K", 20),
 		RetrievalMinSimilarity: envFloat("RETRIEVAL_MIN_SIMILARITY", 0.1),
 		RetrievalMaxTokens:     envInt("RETRIEVAL_MAX_EVIDENCE_TOKENS", 4000),
 		RetrievalEmbedTimeoutS: envInt("RETRIEVAL_EMBED_TIMEOUT_S", 30),
-		LLMProvider:        envString("LLM_PROVIDER", "llamacpp"),
 		LlamaCppBaseURL:    envString("LLAMA_CPP_BASE_URL", "http://localhost:8081"),
 		LLMModel:           envString("LLM_MODEL", "qwen3-4b"),
 		LLMContextWindow:   envInt("LLM_CONTEXT_WINDOW", 4096),

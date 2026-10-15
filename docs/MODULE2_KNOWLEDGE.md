@@ -100,8 +100,10 @@ go test ./...
 go vet ./...
 ```
 
-Without `SUPABASE_DB_URL` the API runs on isolated in-memory stores (dev/test).
-With it, Postgres + Supabase Storage (service-role, server-side only) are used.
+`SUPABASE_DB_URL`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` are
+required: without them the API refuses to boot (fail fast, no silent
+memory-store mode). Postgres + Supabase Storage (service-role, server-side
+only) are always used.
 
 ## Tests
 
@@ -128,8 +130,9 @@ apply order, RLS denial of direct anon/authenticated writes, bucket privacy
 - PDF/DOCX text extraction is intentionally absent (Module 3's pipeline).
 - No full-text search inside Module 2; listing is by `created_at` with
   limit/offset only.
-- Outbox relay is a documented poller contract; no background dispatcher ships
-  in this module (a `dispatched`/`done` updater + Module 3 callback endpoint
-  arrive with Module 3).
-- `KNOWLEDGE_MAX_UPLOAD_MB` env is accepted in config; the compiled validation
-  cap remains 10 MiB (wiring the env into `MaxUploadBytes` is a one-line follow-up).
+- Outbox relay ships as a background loop: the API runs `StartRelay` on boot
+  (immediate catch-up pass, then every `PROCESSING_RELAY_INTERVAL_S`,
+  default 10s), turning pending rows into ingestion jobs with no manual
+  submission.
+- `KNOWLEDGE_MAX_UPLOAD_MB` is wired via `knowledge.ConfigureLimits` at
+  startup (1..100 MiB accepted, 10 MiB default).

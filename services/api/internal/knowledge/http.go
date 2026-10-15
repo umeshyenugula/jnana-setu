@@ -52,7 +52,7 @@ func (h *Handlers) CreateText(w http.ResponseWriter, r *http.Request, orgID stri
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes+1024)
+	r.Body = http.MaxBytesReader(w, r.Body, int64(MaxUploadBytes)+1024)
 	var req createTextRequest
 	if err := api.DecodeJSON(r, &req); err != nil {
 		api.WriteError(w, r, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body", api.CorrelationID(r.Context()), h.Version)
@@ -74,8 +74,8 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, r *http.Request, orgID stri
 	if !ok {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes+4<<20)
-	if err := r.ParseMultipartForm(MaxUploadBytes + 1<<20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, int64(MaxUploadBytes)+4<<20)
+	if err := r.ParseMultipartForm(int64(MaxUploadBytes) + 1<<20); err != nil {
 		api.WriteError(w, r, http.StatusBadRequest, "INVALID_REQUEST", "invalid multipart upload", api.CorrelationID(r.Context()), h.Version)
 		return
 	}
@@ -85,7 +85,7 @@ func (h *Handlers) CreateFile(w http.ResponseWriter, r *http.Request, orgID stri
 		return
 	}
 	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, MaxUploadBytes+1))
+	data, err := io.ReadAll(io.LimitReader(f, int64(MaxUploadBytes)+1))
 	if err != nil {
 		h.writeErr(w, r, err)
 		return
@@ -162,8 +162,8 @@ func (h *Handlers) CreateVersion(w http.ResponseWriter, r *http.Request, orgID, 
 	ct := r.Header.Get("Content-Type")
 	var in CreateVersionInput
 	if strings.HasPrefix(ct, "multipart/form-data") {
-		r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes+4<<20)
-		if err := r.ParseMultipartForm(MaxUploadBytes + 1<<20); err != nil {
+		r.Body = http.MaxBytesReader(w, r.Body, int64(MaxUploadBytes)+4<<20)
+		if err := r.ParseMultipartForm(int64(MaxUploadBytes) + 1<<20); err != nil {
 			api.WriteError(w, r, http.StatusBadRequest, "INVALID_REQUEST", "invalid multipart upload", api.CorrelationID(r.Context()), h.Version)
 			return
 		}
@@ -173,14 +173,14 @@ func (h *Handlers) CreateVersion(w http.ResponseWriter, r *http.Request, orgID, 
 			return
 		}
 		defer f.Close()
-		data, err := io.ReadAll(io.LimitReader(f, MaxUploadBytes+1))
+		data, err := io.ReadAll(io.LimitReader(f, int64(MaxUploadBytes)+1))
 		if err != nil {
 			h.writeErr(w, r, err)
 			return
 		}
 		in = CreateVersionInput{IsFile: true, Filename: header.Filename, DeclaredContentType: header.Header.Get("Content-Type"), Data: data, IdempotencyKey: idemKey(r, r.FormValue("idempotencyKey"))}
 	} else {
-		r.Body = http.MaxBytesReader(w, r.Body, MaxUploadBytes+1024)
+		r.Body = http.MaxBytesReader(w, r.Body, int64(MaxUploadBytes)+1024)
 		var req createVersionJSON
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			api.WriteError(w, r, http.StatusBadRequest, "INVALID_REQUEST", "invalid request body", api.CorrelationID(r.Context()), h.Version)

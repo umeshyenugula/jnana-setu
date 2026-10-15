@@ -30,11 +30,19 @@ func main() {
 	cfg := config.Load()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	var store identity.Store = identity.NewMemoryStore()
-	var knowledgeStore knowledge.Store = knowledge.NewMemoryStore()
-	var knowledgeStorage knowledge.Storage = knowledge.NewMemoryStorage()
+	var store identity.Store
+	var knowledgeStore knowledge.Store
+	var knowledgeStorage knowledge.Storage
 	var pool *pgxpool.Pool
-	if cfg.SupabaseDatabaseURL != "" {
+	if strings.TrimSpace(cfg.SupabaseDatabaseURL) == "" {
+		logger.Error("SUPABASE_DB_URL is required; configure Supabase and run migrations 0001-0006")
+		os.Exit(1)
+	}
+	if strings.TrimSpace(cfg.SupabaseURL) == "" || strings.TrimSpace(cfg.SupabaseServiceKey) == "" {
+		logger.Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for private storage access")
+		os.Exit(1)
+	}
+	{
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		p, err := pgxpool.New(ctx, cfg.SupabaseDatabaseURL)
 		cancel()
@@ -46,46 +54,35 @@ func main() {
 		defer pool.Close()
 		store = identity.NewPostgresStore(pool)
 		knowledgeStore = knowledge.NewPostgresStore(pool)
-		if cfg.SupabaseURL != "" && cfg.SupabaseServiceKey != "" {
-			knowledgeStorage = knowledge.NewSupabaseStorage(cfg.SupabaseURL, cfg.SupabaseServiceKey)
-		}
+		knowledgeStorage = knowledge.NewSupabaseStorage(cfg.SupabaseURL, cfg.SupabaseServiceKey)
 	}
 
 	service := identity.NewService(store)
 	handlers := &identity.Handlers{Service: service, Version: version.Version}
+	knowledge.ConfigureLimits(cfg.KnowledgeMaxUploadMB)
 	knowledgeService := knowledge.NewService(knowledgeStore, knowledgeStorage, store)
 	knowledgeHandlers := &knowledge.Handlers{Service: knowledgeService, Version: version.Version}
 
-	// Module 3: local embedding worker + processing pipeline.
-	// EMBEDDING_PROVIDER=stub selects the dependency-free deterministic
-	// embedder (tests/dev without model weights); anything else uses the
-	// local HTTP worker over loopback. Hosted inference is never used.
-	var embedder processing.Embedder = &processing.StubEmbedder{}
-	if strings.ToLower(strings.TrimSpace(cfg.EmbeddingProvider)) != "stub" {
-		embedder = processing.NewHTTPWorker(cfg.EmbeddingWorkerURL, 0)
-	}
-	memProc := processing.NewMemoryStores()
-	var procJobs processing.JobStore = memProc
-	var procChunks processing.ChunkStore = memProc
-	if pool != nil {
-		pgStores := processing.NewPostgresStores(pool)
-		procJobs = pgStores
-		procChunks = pgStores
-	}
+	// Module 3: local embedding worker + processing pipeline. The embedder
+	// is always the real local worker (EMBEDDING_WORKER_URL); there is no
+	// stub or hosted fallback in production. Hosted inference is never used.
+	embedder := processing.NewHTTPWorker(cfg.EmbeddingWorkerURL, 0)
+	pgStores := processing.NewPostgresStores(pool)
+	var procJobs processing.JobStore = pgStores
+	var procChunks processing.ChunkStore = pgStores
 	procCfg := processing.DefaultConfig()
 	procCfg.Chunks = processing.ChunkConfig{TargetTokens: cfg.ChunkTargetTokens, OverlapTokens: cfg.ChunkOverlapTokens}
 	module2 := processing.NewModule2Adapter(knowledgeStore, knowledgeStorage, knowledgeService)
 	processingService := processing.NewService(procCfg, procJobs, procChunks, embedder, module2, module2, store, module2)
 	processingHandlers := &processing.Handlers{Service: processingService, Version: version.Version}
 	processingService.Start(context.Background(), cfg.ProcessingWorkers)
+	// Outbox relay: turn Module 2 upload/version/delete rows into ingestion
+	// jobs. Without this loop nothing is ever indexed.
+	processingService.StartRelay(context.Background(),
+		time.Duration(cfg.ProcessingRelayIntervalS)*time.Second, 25)
 
 	// Module 4: retrieval engine over the same local embedder and pool.
-	// Without a database the memory repository serves empty results
-	// (insufficient evidence) rather than failing.
-	var chunkRepo retrieval.ChunkRepository = retrieval.NewMemoryRepository()
-	if pool != nil {
-		chunkRepo = retrieval.NewPostgresRepository(pool)
-	}
+	var chunkRepo retrieval.ChunkRepository = retrieval.NewPostgresRepository(pool)
 	retrievalCfg := retrieval.DefaultConfig()
 	retrievalCfg.Rank.TopK = cfg.RetrievalTopK
 	retrievalCfg.MaxTopK = cfg.RetrievalMaxTopK
@@ -99,19 +96,14 @@ func main() {
 		Version: version.Version,
 	}
 
-	// Module 5: local inference. LLM_PROVIDER=mock selects the deterministic
-	// stand-in (tests/Module 6 development without model weights); anything
-	// else uses the local llama.cpp runtime over loopback/private network.
-	// Hosted inference is never used.
-	var llmRuntime inference.Runtime = &inference.MockRuntime{}
-	if strings.ToLower(strings.TrimSpace(cfg.LLMProvider)) != "mock" {
-		thinking := cfg.LLMEnableThinking
-		llmRuntime = inference.NewLlamaCppRuntime(inference.LlamaCppConfig{
-			BaseURL:        cfg.LlamaCppBaseURL,
-			Model:          cfg.LLMModel,
-			EnableThinking: &thinking,
-		})
-	}
+	// Module 5: local inference over the llama.cpp runtime on the private
+	// network. There is no mock or hosted fallback in production.
+	thinking := cfg.LLMEnableThinking
+	llmRuntime := inference.NewLlamaCppRuntime(inference.LlamaCppConfig{
+		BaseURL:        cfg.LlamaCppBaseURL,
+		Model:          cfg.LLMModel,
+		EnableThinking: &thinking,
+	})
 	inferenceCfg := inference.DefaultConfig()
 	inferenceCfg.Model = cfg.LLMModel
 	inferenceCfg.RequestTimeout = time.Duration(cfg.LLMRequestTimeoutS) * time.Second
@@ -131,13 +123,8 @@ func main() {
 	}
 
 	// Module 6: chat orchestration over Module 1 tenants, Module 4
-	// retrieval, Module 5 generation, and chat persistence. Without a
-	// database the memory store keeps the endpoint functional for
-	// development; conversations are not durable in that mode.
-	var chatStore chat.Store = chat.NewMemoryStore()
-	if pool != nil {
-		chatStore = chat.NewPostgresStore(pool)
-	}
+	// retrieval, Module 5 generation, and durable chat persistence.
+	chatStore := chat.NewPostgresStore(pool)
 	chatCfg := chat.DefaultConfig()
 	chatCfg.MaxMessageChars = cfg.ChatMaxMessageChars
 	chatCfg.HistoryLimit = cfg.ChatHistoryLimit
@@ -174,9 +161,6 @@ func main() {
 		{
 			Name: "db", Mandatory: true,
 			Probe: func(ctx context.Context) error {
-				if pool == nil {
-					return nil // memory-store dev mode: nothing to probe
-				}
 				pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 				defer cancel()
 				return pool.Ping(pctx)
@@ -220,31 +204,33 @@ func main() {
 		}
 		return out
 	})
-	if pool != nil {
-		dbPool := pool
-		observability.RegisterIngestionCollector(obsReg, func(ctx context.Context) (map[string]int64, error) {
-			rows, err := dbPool.Query(ctx, `select status, count(*) from public.ingestion_jobs group by status`)
-			if err != nil {
+	observability.RegisterIngestionCollector(obsReg, func(ctx context.Context) (map[string]int64, error) {
+		rows, err := pool.Query(ctx, `select status, count(*) from public.ingestion_jobs group by status`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		counts := map[string]int64{}
+		for rows.Next() {
+			var status string
+			var n int64
+			if err := rows.Scan(&status, &n); err != nil {
 				return nil, err
 			}
-			defer rows.Close()
-			counts := map[string]int64{}
-			for rows.Next() {
-				var status string
-				var n int64
-				if err := rows.Scan(&status, &n); err != nil {
-					return nil, err
-				}
-				counts[status] = n
-			}
-			return counts, rows.Err()
-		})
+			counts[status] = n
+		}
+		return counts, rows.Err()
+	})
+	// Durable audit sink. A failed startup event is logged, never fatal:
+	// audit must not prevent the API from serving.
+	auditSink := observability.Emitter(&observability.PostgresEmitter{Pool: pool})
+	if err := auditSink.Emit(context.Background(), observability.Event{
+		Service: "api", Name: observability.EventConfigChanged,
+		Outcome: "ok", Detail: map[string]any{"version": version.Version},
+		OccurredAt: time.Now().UTC(),
+	}); err != nil {
+		obsLog.Warn(context.Background(), "audit.startup_emit_failed")
 	}
-	var auditSink observability.Emitter = &observability.LogEmitter{Logger: obsLog}
-	if pool != nil {
-		auditSink = &observability.PostgresEmitter{Pool: pool}
-	}
-	_ = auditSink
 	obsLog.Event(context.Background(), "api.start",
 		slog.String("version", version.Version),
 		slog.Bool("otel_enabled", cfg.OtelEnabled))
@@ -256,16 +242,17 @@ func main() {
 	})
 
 	handler := router.New(router.Deps{
-		Version:    version.Version,
-		Auth:       verifier,
-		Handlers:   handlers,
-		Knowledge:  knowledgeHandlers,
-		Processing: processingHandlers,
-		Retrieval:  retrievalHandlers,
-		Inference:  inferenceHandlers,
-		Chat:       chatHandlers,
-		Ops:        obsHandlers,
-		Obs:        &observability.Stack{Log: obsLog, Inst: obsInst, Tracer: tracer},
+		Version:            version.Version,
+		Auth:               verifier,
+		Handlers:           handlers,
+		Knowledge:          knowledgeHandlers,
+		Processing:         processingHandlers,
+		Retrieval:          retrievalHandlers,
+		Inference:          inferenceHandlers,
+		Chat:               chatHandlers,
+		Ops:                obsHandlers,
+		Obs:                &observability.Stack{Log: obsLog, Inst: obsInst, Tracer: tracer},
+		CORSAllowedOrigins: strings.Split(cfg.CORSAllowedOrigins, ","),
 	})
 
 	server := &http.Server{

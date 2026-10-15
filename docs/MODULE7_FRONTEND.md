@@ -21,9 +21,11 @@ migrations, extraction, retrieval, or inference code lives here.
   Calls only `POST /api/v1/chat`, `GET /api/v1/chat/sessions/*`, and the
   public `GET /api/v1/widget-config/*`.
 - `apps/chat-widget/public/loader.js` — dependency-free embed snippet handler:
-  validates `data-widget-id`, builds a sandboxed iframe, relays state with
-  exact-origin `postMessage` both ways, targets the exact widget origin
-  (never `"*"`), accepts no host commands beyond open/close/toggle.
+  validates `data-widget-id`, requires `data-api-base` (the API origin the
+  iframe calls; never defaults to the static host), builds a sandboxed
+  iframe, relays state with exact-origin `postMessage` both ways, targets
+  the exact widget origin (never `"*"`), accepts no host commands beyond
+  open/close/toggle.
 
 ## API contracts consumed
 

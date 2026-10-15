@@ -104,11 +104,11 @@ export function WidgetDetailPage({ orgId, widgetId }: { orgId: string; widgetId:
             not a secret; the backend validates the website origin on every chat request.
           </p>
           <pre data-testid="embed-snippet">
-            <code>{buildEmbedSnippet({ widgetHost, widgetId: widget.publicWidgetId })}</code>
+            <code>{buildEmbedSnippet({ widgetHost, widgetId: widget.publicWidgetId, apiBase })}</code>
           </pre>
           <button
             type="button"
-            onClick={() => void navigator.clipboard?.writeText(buildEmbedSnippet({ widgetHost, widgetId: widget.publicWidgetId }))}
+            onClick={() => void navigator.clipboard?.writeText(buildEmbedSnippet({ widgetHost, widgetId: widget.publicWidgetId, apiBase }))}
           >
             Copy snippet
           </button>

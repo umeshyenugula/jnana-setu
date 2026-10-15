@@ -96,7 +96,8 @@ tokens on the 16 GB CPU laptop; first request pays model-warmup cost.
 
 ## Tests
 
-`go test ./internal/inference/ -v` — **24 tests pass** (mock runtime only):
+`go test ./internal/inference/ -v` — **24 tests pass** (isolated mock runtime
+in tests only; production has no mock path):
 valid generation, thinking stripping, invalid/empty messages, parameter
 ranges, prompt limits, not-ready 503, timeout 504 (+counter), cancellation,
 malformed/empty-choices/503-status/refused runtime paths, success parsing,
@@ -106,14 +107,13 @@ slot exhaustion 429 (+counter), graceful drain and drain-timeout, auth
 Local-model smoke test (requires downloaded weights + running llama-server):
 
 ```powershell
-$env:LLM_PROVIDER='llamacpp'
 go run ./cmd/api
 # then POST /api/v1/internal/inference/generate as above; expect 200 with concise text,
 # thinkingStripped=false, finishReason=stop.
 ```
 
 **Status: NOT executed — Qwen3-4B weights and llama.cpp are not installed in
-this environment.** Do not treat mock-runtime results as model validation.
+this environment.** Do not treat isolated test-runtime results as model validation.
 
 ## Module 6 integration
 

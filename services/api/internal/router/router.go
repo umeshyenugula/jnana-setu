@@ -26,6 +26,11 @@ type Deps struct {
 	Chat       *chat.Handlers
 	Ops        *observability.Handlers
 	Obs        *observability.Stack
+	// CORSAllowedOrigins is the strict allowlist for authenticated
+	// endpoints. Public endpoints (health, readiness, widget-config, chat,
+	// inference health/ready) reflect the request Origin instead, since they
+	// carry no ambient credentials and enforce their own server-side policy.
+	CORSAllowedOrigins []string
 }
 
 func New(deps Deps) http.Handler {
@@ -381,8 +386,35 @@ func New(deps Deps) http.Handler {
 		handler = deps.Obs.Wrap(handler)
 	}
 	handler = api.RecoveryMiddleware(deps.Version, handler)
+	handler = api.CORSMiddleware(deps.CORSAllowedOrigins, isPublicRoute)(handler)
 	handler = api.CorrelationMiddleware(handler)
 	return handler
+}
+
+// isPublicRoute reports endpoints that carry no Authorization header:
+// liveness/readiness, public widget config, customer chat, and inference
+// liveness probes. Everything else requires a CORS allowlist match.
+func isPublicRoute(r *http.Request) bool {
+	segs := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(segs) < 3 || segs[0] != "api" || segs[1] != "v1" {
+		return false
+	}
+	rest := segs[2:]
+	switch {
+	case len(rest) == 1 && (rest[0] == "health" || rest[0] == "ready"):
+		return true
+	case len(rest) == 2 && rest[0] == "widget-config":
+		return true
+	case len(rest) == 2 && rest[0] == "processing" && (rest[1] == "health" || rest[1] == "ready"):
+		return true
+	case len(rest) >= 1 && rest[0] == "chat":
+		return true
+	case len(rest) == 3 && rest[0] == "internal" && rest[1] == "inference" &&
+		(rest[2] == "health" || rest[2] == "ready"):
+		return true
+	default:
+		return false
+	}
 }
 
 func methodNotAllowed(w http.ResponseWriter, r *http.Request) {

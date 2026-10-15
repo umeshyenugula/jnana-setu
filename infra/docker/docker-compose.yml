@@ -15,20 +15,71 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-http}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      SUPABASE_JWT_ISSUER: ${SUPABASE_JWT_ISSUER:-}
+      SUPABASE_JWT_AUDIENCE: ${SUPABASE_JWT_AUDIENCE:-authenticated}
+      KNOWLEDGE_MAX_UPLOAD_MB: ${KNOWLEDGE_MAX_UPLOAD_MB:-10}
       EMBEDDING_WORKER_URL: ${EMBEDDING_WORKER_URL:-http://embeddings:8082}
       PROCESSING_WORKERS: ${PROCESSING_WORKERS:-2}
+      PROCESSING_RELAY_INTERVAL_S: ${PROCESSING_RELAY_INTERVAL_S:-10}
       CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-200}
       CHUNK_OVERLAP_TOKENS: ${CHUNK_OVERLAP_TOKENS:-35}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
-      LLM_PROVIDER: ${LLM_PROVIDER:-llamacpp}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-5}
+      RETRIEVAL_MAX_TOP_K: ${RETRIEVAL_MAX_TOP_K:-20}
+      RETRIEVAL_MIN_SIMILARITY: ${RETRIEVAL_MIN_SIMILARITY:-0.1}
+      RETRIEVAL_MAX_EVIDENCE_TOKENS: ${RETRIEVAL_MAX_EVIDENCE_TOKENS:-4000}
+      RETRIEVAL_EMBED_TIMEOUT_S: ${RETRIEVAL_EMBED_TIMEOUT_S:-30}
       LLAMA_CPP_BASE_URL: ${LLAMA_CPP_BASE_URL:-http://llm:8081}
       LLM_MODEL: ${LLM_MODEL:-qwen3-4b}
+      LLM_REQUEST_TIMEOUT_S: ${LLM_REQUEST_TIMEOUT_S:-120}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
+      LLM_TOP_P: ${LLM_TOP_P:-0.9}
       LLM_MAX_CONCURRENT: ${LLM_MAX_CONCURRENT:-1}
+      LLM_ENABLE_THINKING: ${LLM_ENABLE_THINKING:-false}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-512}
+      LLM_MAX_PROMPT_CHARS: ${LLM_MAX_PROMPT_CHARS:-12000}
+      CHAT_MAX_MESSAGE_CHARS: ${CHAT_MAX_MESSAGE_CHARS:-2000}
+      CHAT_HISTORY_LIMIT: ${CHAT_HISTORY_LIMIT:-10}
+      CHAT_TOP_K: ${CHAT_TOP_K:-5}
+      CHAT_MAX_PROMPT_CHARS: ${CHAT_MAX_PROMPT_CHARS:-8000}
+      CHAT_FALLBACK_TEXT: ${CHAT_FALLBACK_TEXT:-}
+      CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-90}
+      CHAT_RATE_LIMIT_PER_MIN: ${CHAT_RATE_LIMIT_PER_MIN:-30}
+      OBS_LOG_LEVEL: ${OBS_LOG_LEVEL:-info}
+      OBS_HEALTH_TIMEOUT_S: ${OBS_HEALTH_TIMEOUT_S:-5}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
+      OTEL_SAMPLE_RATIO: ${OTEL_SAMPLE_RATIO:-0.1}
     restart: unless-stopped
     depends_on:
       - embeddings
       - llm
+
+  # Frontend: admin dashboard (Vite build args baked at image build time).
+  dashboard:
+    build:
+      context: ../../apps/admin-dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${DASHBOARD_API_BASE_URL:-http://localhost:8080}
+        VITE_SUPABASE_URL: ${SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+        VITE_WIDGET_HOST: ${WIDGET_HOST:-http://localhost:5174}
+    ports:
+      - "127.0.0.1:5173:80"
+    restart: unless-stopped
+
+  # Frontend: embeddable chat widget + loader.js host.
+  widget:
+    build:
+      context: ../../apps/chat-widget
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${WIDGET_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "127.0.0.1:5174:80"
+    restart: unless-stopped
 
   embeddings:
     build:
@@ -61,7 +112,7 @@ services:
     environment:
       HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
     volumes:
-      - ./models/llm:/models/llm:ro
+      - ../../models/llm:/models/llm:ro
     expose:
       - "8081"
     restart: "no"

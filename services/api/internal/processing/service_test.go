@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"example.com/ai-knowledge-assistant/services/api/internal/identity"
 	"github.com/stretchr/testify/require"
@@ -284,4 +285,20 @@ func TestRelayOnce(t *testing.T) {
 		jobs++
 	}
 	require.Equal(t, 1, jobs)
+}
+
+func TestStartRelayIndexesPendingRows(t *testing.T) {
+	content := &stubContent{versions: map[string]VersionContent{
+		"org-1/doc-9/ver-1": {Data: []byte("relay me"), ContentType: "text/plain", IsActive: true},
+	}}
+	svc, _, _, outbox := testService(content)
+	outbox.pending = []OutboxEntry{{ID: "ob-1", OrgID: "org-1", DocID: "doc-9", VersionID: "ver-1", Operation: "index", IdempotencyKey: "relay-key"}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.StartRelay(ctx, 10*time.Millisecond, 10)
+	// The stub never drains pending rows, so the loop re-dispatches the
+	// same idempotent row every tick; assert at-least-once pickup.
+	require.Eventually(t, func() bool {
+		return len(outbox.dispatched) >= 1
+	}, 2*time.Second, 10*time.Millisecond, "relay loop never picked up the pending row")
 }

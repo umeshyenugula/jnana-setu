@@ -135,7 +135,7 @@ func (s *SupabaseStorage) Get(ctx context.Context, path string) ([]byte, error) 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("storage fetch failed: %s", resp.Status)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, MaxUploadBytes+1))
+	return io.ReadAll(io.LimitReader(resp.Body, int64(MaxUploadBytes)+1))
 }
 
 func (s *SupabaseStorage) Delete(ctx context.Context, path string) error {

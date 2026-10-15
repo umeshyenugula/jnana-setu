@@ -490,3 +490,31 @@ func (s *Service) Readiness(ctx context.Context) (map[string]any, error) {
 	}
 	return map[string]any{"ready": true, "embedder": s.embed.Name(), "model": EmbedModelName}, nil
 }
+
+// StartRelay polls the Module 2 outbox and submits jobs until ctx ends.
+// This is the production handoff that turns uploads into ingestion jobs:
+// without it, outbox rows sit pending forever and nothing gets indexed.
+// Relay is idempotent and self-healing — failures are retried on the next
+// tick and pending rows survive restarts.
+func (s *Service) StartRelay(ctx context.Context, interval time.Duration, limit int) {
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 25
+	}
+	go func() {
+		// Immediate first pass catches up rows written while we were down.
+		_, _ = s.RelayOnce(context.Background(), limit)
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				_, _ = s.RelayOnce(context.Background(), limit)
+			}
+		}
+	}()
+}

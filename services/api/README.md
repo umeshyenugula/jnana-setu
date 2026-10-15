@@ -41,15 +41,13 @@ Supported endpoints:
   - `GET /api/v1/ready` (public, minimal)
   - `GET /api/v1/metrics` (header `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>`)
 
-Env:
+Env (see `.env.example` for the full list — Supabase, internal token, and both local model workers are all required):
 ```
-# EMBEDDING_PROVIDER=stub for dependency-free dev/tests without model weights.
-EMBEDDING_PROVIDER=http EMBEDDING_WORKER_URL=http://127.0.0.1:8082 PROCESSING_WORKERS=2
-# Required for retrieval; empty fails closed. Tune threshold per deployment.
-INTERNAL_SERVICE_TOKEN=<set-a-secret> RETRIEVAL_TOP_K=5 RETRIEVAL_MIN_SIMILARITY=0.1
+EMBEDDING_WORKER_URL=http://127.0.0.1:8082 LLAMA_CPP_BASE_URL=http://localhost:8081
+INTERNAL_SERVICE_TOKEN=<set-a-secret> SUPABASE_DB_URL=<postgres-connection-string>
 ```
 
-Run:
+Run (requires Supabase + both local model workers — see `.env.example`):
 ```
 go run ./cmd/api
 ```
