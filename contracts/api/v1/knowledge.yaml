@@ -1,0 +1,161 @@
+openapi: 3.1.0
+info:
+  title: AI Knowledge Assistant API — Module 2 (Knowledge Management)
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/organizations/{organization_id}/knowledge/text:
+    post:
+      summary: Create knowledge from submitted text
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, contentText]
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                contentText: { type: string, minLength: 1, maxLength: 200000 }
+                idempotencyKey: { type: string }
+      responses:
+        '201': { description: Document created, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/organizations/{organization_id}/knowledge/files:
+    post:
+      summary: Upload a supported document file
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: '.txt, .md, .pdf or .docx up to 10 MiB' }
+                title: { type: string }
+                idempotencyKey: { type: string }
+      responses:
+        '201': { description: Document created, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/organizations/{organization_id}/knowledge:
+    get:
+      summary: List documents for an organization
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - { name: includeInactive, in: query, schema: { type: boolean } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200': { description: Document list, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/organizations/{organization_id}/knowledge/{document_id}:
+    get:
+      summary: Retrieve a document and its current version metadata
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: Document, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+    patch:
+      summary: Rename and/or activate/deactivate a document
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, minLength: 1, maxLength: 200 }
+                isActive: { type: boolean }
+      responses:
+        '200': { description: Updated document, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+    delete:
+      summary: Delete a document and enqueue retrieval-index cleanup
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/organizations/{organization_id}/knowledge/{document_id}/versions:
+    get:
+      summary: List versions of a document
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: Version list, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+    post:
+      summary: Create a new version (multipart file OR JSON text)
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contentText]
+              properties:
+                contentText: { type: string }
+                idempotencyKey: { type: string }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                idempotencyKey: { type: string }
+      responses:
+        '201': { description: Version created, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/organizations/{organization_id}/knowledge/{document_id}/status:
+    get:
+      summary: Retrieve processing status
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/organizations/{organization_id}/knowledge/{document_id}/reprocess:
+    post:
+      summary: Request reprocessing of the current version (retry-safe, no new version)
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotencyKey: { type: string }
+      responses:
+        '202': { description: Processing requested, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    OrganizationId: { name: organization_id, in: path, required: true, schema: { type: string, format: uuid } }
+    DocumentId: { name: document_id, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    SuccessEnvelope:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object }
+        meta:
+          type: object
+          properties:
+            correlationId: { type: string }
+            timestamp: { type: string, format: date-time }
+            version: { type: string }
+            path: { type: string }
