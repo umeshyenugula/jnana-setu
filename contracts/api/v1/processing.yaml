@@ -1,0 +1,78 @@
+openapi: 3.1.0
+info:
+  title: AI Knowledge Assistant API — Module 3 (Document Processing & Embeddings)
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/processing/jobs:
+    post:
+      summary: Submit a processing job for one immutable document version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, documentId, versionId, operation]
+              properties:
+                organizationId: { type: string, format: uuid }
+                documentId: { type: string, format: uuid }
+                versionId: { type: string, format: uuid, description: Immutable version to process }
+                operation: { type: string, enum: [index, reindex, delete] }
+                idempotencyKey: { type: string }
+                requestedBy: { type: string }
+      responses:
+        '201': { description: Job queued, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/processing/jobs/{job_id}:
+    get:
+      summary: Inspect job status, attempts and error codes
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Job, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/processing/jobs/{job_id}/retry:
+    post:
+      summary: Retry a failed job (until max attempts)
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '202': { description: Job re-queued, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/processing/jobs/{job_id}/cancel:
+    post:
+      summary: Cancel a queued job
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Job cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/processing/health:
+    get:
+      summary: Processing service liveness (no auth)
+      security: []
+      responses:
+        '200': { description: Healthy, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+  /api/v1/processing/ready:
+    get:
+      summary: Readiness including local embedding worker check (no auth)
+      security: []
+      responses:
+        '200': { description: Ready, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessEnvelope' } } } }
+        '503': { description: Embedding worker not ready }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    SuccessEnvelope:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: { type: object }
+        meta:
+          type: object
+          properties:
+            correlationId: { type: string }
+            timestamp: { type: string, format: date-time }
+            version: { type: string }
+            path: { type: string }
