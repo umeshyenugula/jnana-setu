@@ -58,7 +58,14 @@ def _load() -> None:
             from sentence_transformers import SentenceTransformer
 
             src = MODEL_DIR if os.path.isdir(MODEL_DIR) else MODEL_ID
-            _model = SentenceTransformer(src)
+            if src == MODEL_DIR:
+                normalize_dir = os.path.join(MODEL_DIR, "2_Normalize")
+                os.makedirs(normalize_dir, exist_ok=True)
+                normalize_config = os.path.join(normalize_dir, "config.json")
+                if not os.path.exists(normalize_config):
+                    with open(normalize_config, "w", encoding="utf-8") as config_file:
+                        config_file.write("{}")
+            _model = SentenceTransformer(src, local_files_only=src == MODEL_DIR)
         except Exception as exc:  # controlled error, surfaced via /ready
             _model_error = f"{type(exc).__name__}: {exc}"
 

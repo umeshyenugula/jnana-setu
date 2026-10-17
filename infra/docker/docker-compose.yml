@@ -11,15 +11,15 @@ services:
       APP_ENV: ${APP_ENV:-development}
       PORT: "8080"
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:5174}
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:-https://foftiiszzayvhqbpqhgs.supabase.co}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-sb_publishable_pPrWKfSr1aOSJfro-eUdyg_HVLCyV52}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
       SUPABASE_JWT_ISSUER: ${SUPABASE_JWT_ISSUER:-}
       SUPABASE_JWT_AUDIENCE: ${SUPABASE_JWT_AUDIENCE:-authenticated}
       KNOWLEDGE_MAX_UPLOAD_MB: ${KNOWLEDGE_MAX_UPLOAD_MB:-10}
-      EMBEDDING_WORKER_URL: ${EMBEDDING_WORKER_URL:-http://embeddings:8082}
+      EMBEDDING_WORKER_URL: http://embeddings:8082
       PROCESSING_WORKERS: ${PROCESSING_WORKERS:-2}
       PROCESSING_RELAY_INTERVAL_S: ${PROCESSING_RELAY_INTERVAL_S:-10}
       CHUNK_TARGET_TOKENS: ${CHUNK_TARGET_TOKENS:-200}
@@ -30,7 +30,7 @@ services:
       RETRIEVAL_MIN_SIMILARITY: ${RETRIEVAL_MIN_SIMILARITY:-0.1}
       RETRIEVAL_MAX_EVIDENCE_TOKENS: ${RETRIEVAL_MAX_EVIDENCE_TOKENS:-4000}
       RETRIEVAL_EMBED_TIMEOUT_S: ${RETRIEVAL_EMBED_TIMEOUT_S:-30}
-      LLAMA_CPP_BASE_URL: ${LLAMA_CPP_BASE_URL:-http://llm:8081}
+      LLAMA_CPP_BASE_URL: http://llm:8081
       LLM_MODEL: ${LLM_MODEL:-qwen3-4b}
       LLM_REQUEST_TIMEOUT_S: ${LLM_REQUEST_TIMEOUT_S:-120}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
@@ -86,7 +86,7 @@ services:
       context: ../../services/embeddings
       dockerfile: Dockerfile
     environment:
-      EMBEDDING_MODEL_DIR: ${EMBEDDING_MODEL_DIR:-/models/all-MiniLM-L6-v2}
+      EMBEDDING_MODEL_DIR: /models/all-MiniLM-L6-v2
       HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
     volumes:
       - embedding-models:/models
@@ -96,8 +96,10 @@ services:
   # only — no published ports. No restart-on-failure policy: a crash must be
   # investigated, not looped. Mount models dir read-only; weights are never
   # committed (see docs/MODULE5_INFERENCE.md).
+ 
+ 
   llm:
-    image: ghcr.io/ggerganov/llama.cpp:server
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda12-b10884
     command:
       - -m
       - /models/llm/${LLM_MODEL_FILE:-qwen3-4b-Q4_K_M.gguf}
@@ -106,16 +108,26 @@ services:
       - --port
       - "8081"
       - --ctx-size
-      - ${LLM_CONTEXT_WINDOW:-4096}
+      - ${LLM_CONTEXT_WINDOW:-2048}
       - --n-predict
       - ${LLM_MAX_OUTPUT_TOKENS:-512}
+      - --n-gpu-layers
+      - "99"
     environment:
       HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
     volumes:
       - ../../models/llm:/models/llm:ro
+    gpus: all
     expose:
       - "8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     restart: "no"
+
 
   prometheus:
     image: prom/prometheus:v2.53.0

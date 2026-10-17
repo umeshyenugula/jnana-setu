@@ -3,7 +3,9 @@ package processing
 import (
 	"archive/zip"
 	"bytes"
+	"compress/zlib"
 	"fmt"
+	"io"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -18,10 +20,10 @@ type ExtractedText struct {
 
 // SectionMeta records page/section provenance preserved during extraction.
 type SectionMeta struct {
-	Page     *int   `json:"page,omitempty"`
-	Section  string `json:"section,omitempty"`
-	CharStart int   `json:"charStart"`
-	CharEnd   int   `json:"charEnd"`
+	Page      *int   `json:"page,omitempty"`
+	Section   string `json:"section,omitempty"`
+	CharStart int    `json:"charStart"`
+	CharEnd   int    `json:"charEnd"`
 }
 
 type extractError struct {
@@ -138,7 +140,7 @@ func extractPDF(data []byte) (string, []SectionMeta, error) {
 	var sections []SectionMeta
 	offset := 0
 	for i, page := range pages {
-		text := decodePDFTextOps(page)
+		text := decodePDFPageText(page)
 		if strings.TrimSpace(text) != "" {
 			n := i + 1
 			sections = append(sections, SectionMeta{Page: &n, CharStart: offset})
@@ -160,6 +162,43 @@ func extractPDF(data []byte) (string, []SectionMeta, error) {
 		sections[i].CharEnd = end
 	}
 	return strings.Join(parts, "\n\n"), sections, nil
+}
+
+func decodePDFPageText(page []byte) string {
+	parts := []string{decodePDFTextOps(page)}
+	for searchFrom := 0; searchFrom < len(page); {
+		filter := bytes.Index(page[searchFrom:], []byte("/FlateDecode"))
+		if filter < 0 {
+			break
+		}
+		filter += searchFrom
+		streamStart := bytes.Index(page[filter:], []byte("stream"))
+		if streamStart < 0 {
+			break
+		}
+		streamStart += filter + len("stream")
+		if streamStart < len(page) && page[streamStart] == '\r' {
+			streamStart++
+		}
+		if streamStart < len(page) && page[streamStart] == '\n' {
+			streamStart++
+		}
+		streamEnd := bytes.Index(page[streamStart:], []byte("endstream"))
+		if streamEnd < 0 {
+			break
+		}
+		streamEnd += streamStart
+		reader, err := zlib.NewReader(bytes.NewReader(page[streamStart:streamEnd]))
+		if err == nil {
+			decoded, readErr := io.ReadAll(io.LimitReader(reader, MaxExtractBytes))
+			_ = reader.Close()
+			if readErr == nil {
+				parts = append(parts, decodePDFTextOps(decoded))
+			}
+		}
+		searchFrom = streamEnd + len("endstream")
+	}
+	return strings.Join(parts, " ")
 }
 
 func splitPDFPages(data []byte) [][]byte {
@@ -279,7 +318,12 @@ func hasTextOpPrefix(rest []byte) bool {
 			return true
 		}
 	}
-	return false
+	// Real PDFs commonly place strings in a TJ array with numeric spacing
+	// values between them, so the operator is not adjacent to each string.
+	if len(rest) > 512 {
+		rest = rest[:512]
+	}
+	return bytes.Contains(rest, []byte("TJ"))
 }
 
 func decodeHexString(s string) string {

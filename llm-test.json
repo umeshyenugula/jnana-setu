@@ -1,0 +1,11 @@
+﻿{
+  "model": "qwen3-4b-Q4_K_M.gguf",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Say hello"
+    }
+  ],
+  "max_tokens": 20,
+  "stream": false
+}

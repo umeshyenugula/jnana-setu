@@ -58,19 +58,9 @@ func (s *PostgresStore) CreateDocumentWithVersion(ctx context.Context, doc Docum
 	if err := tx.Commit(ctx); err != nil {
 		return Document{}, Version{}, ProcessingRequest{}, mapPGError(err)
 	}
-	d, err := s.GetDocument(ctx, doc.OrganizationID, doc.ID)
-	if err != nil {
-		return Document{}, Version{}, ProcessingRequest{}, err
-	}
-	v, err := s.GetVersion(ctx, doc.OrganizationID, doc.ID, ver.ID)
-	if err != nil {
-		return Document{}, Version{}, ProcessingRequest{}, err
-	}
-	o, err := s.GetOutbox(ctx, outbox.ID)
-	if err != nil {
-		return Document{}, Version{}, ProcessingRequest{}, err
-	}
-	return d, v, o, nil
+	currentVersionID := ver.ID
+	doc.CurrentVersionID = &currentVersionID
+	return doc, ver, outbox, nil
 }
 
 func (s *PostgresStore) GetDocument(ctx context.Context, orgID, docID string) (Document, error) {
@@ -205,6 +195,10 @@ func (s *PostgresStore) ListVersions(ctx context.Context, orgID, docID string) (
 func (s *PostgresStore) AddVersion(ctx context.Context, ver Version, outbox ProcessingRequest) (Version, Document, ProcessingRequest, error) {
 	ctx, cancel := withTimeout(ctx)
 	defer cancel()
+	doc, err := s.GetDocument(ctx, outbox.OrganizationID, ver.DocumentID)
+	if err != nil {
+		return Version{}, Document{}, ProcessingRequest{}, err
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Version{}, Document{}, ProcessingRequest{}, err
@@ -240,19 +234,11 @@ func (s *PostgresStore) AddVersion(ctx context.Context, ver Version, outbox Proc
 	if err := tx.Commit(ctx); err != nil {
 		return Version{}, Document{}, ProcessingRequest{}, mapPGError(err)
 	}
-	v, err := s.GetVersion(ctx, outbox.OrganizationID, ver.DocumentID, ver.ID)
-	if err != nil {
-		return Version{}, Document{}, ProcessingRequest{}, err
-	}
-	d, err := s.GetDocument(ctx, outbox.OrganizationID, ver.DocumentID)
-	if err != nil {
-		return Version{}, Document{}, ProcessingRequest{}, err
-	}
-	o, err := s.GetOutbox(ctx, outbox.ID)
-	if err != nil {
-		return Version{}, Document{}, ProcessingRequest{}, err
-	}
-	return v, d, o, nil
+	currentVersionID := ver.ID
+	doc.CurrentVersionID = &currentVersionID
+	doc.ProcessingStatus = ProcessingPending
+	doc.UpdatedAt = ver.CreatedAt
+	return ver, doc, outbox, nil
 }
 
 func (s *PostgresStore) SetProcessingStatus(ctx context.Context, orgID, docID string, from []string, to string) (Document, error) {
