@@ -3,6 +3,7 @@ package processing
 import (
 	"archive/zip"
 	"bytes"
+	"compress/zlib"
 	"fmt"
 	"strings"
 	"testing"
@@ -34,6 +35,14 @@ func minDOCX(paras ...string) []byte {
 	return buf.Bytes()
 }
 
+func compressedPDF(text string) []byte {
+	var compressed bytes.Buffer
+	zw := zlib.NewWriter(&compressed)
+	_, _ = zw.Write([]byte("BT /F1 12 Tf 72 720 Td (" + text + ") Tj ET"))
+	_ = zw.Close()
+	return append([]byte("%PDF-1.4\n/Type /Page /Filter /FlateDecode\nstream\n"), append(compressed.Bytes(), []byte("\nendstream")...)...)
+}
+
 func TestExtractTXT(t *testing.T) {
 	out, err := Extract([]byte("  hello   world\n\nsecond  para "), "text/plain", "a.txt")
 	require.NoError(t, err)
@@ -58,6 +67,25 @@ func TestExtractPDF(t *testing.T) {
 	require.Len(t, out.Sections, 2)
 	require.Equal(t, 1, *out.Sections[0].Page)
 	require.Equal(t, 2, *out.Sections[1].Page)
+}
+
+func TestExtractCompressedPDF(t *testing.T) {
+	out, err := Extract(compressedPDF("Compressed PDF text"), "application/pdf", "compressed.pdf")
+	require.NoError(t, err)
+	require.Contains(t, out.Text, "Compressed PDF text")
+}
+
+func TestExtractPDFTextArray(t *testing.T) {
+	var compressed bytes.Buffer
+	zw := zlib.NewWriter(&compressed)
+	_, _ = zw.Write([]byte("BT [(PDF) 120 (text array)] TJ ET"))
+	_ = zw.Close()
+	pdf := append([]byte("%PDF-1.4\n/Type /Page /Filter /FlateDecode\nstream\n"), append(compressed.Bytes(), []byte("\nendstream")...)...)
+
+	out, err := Extract(pdf, "application/pdf", "text-array.pdf")
+	require.NoError(t, err)
+	require.Contains(t, out.Text, "PDF")
+	require.Contains(t, out.Text, "text array")
 }
 
 func TestExtractDOCX(t *testing.T) {

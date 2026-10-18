@@ -41,12 +41,13 @@ type MemoryStores struct {
 	jobs      map[string]Job
 	byIdem    map[string]string
 	chunks    map[string]Chunk // key: org/doc/version/index
+	outbox    map[string]OutboxEntry
 	failOn    map[string]error
 	failStage bool
 }
 
 func NewMemoryStores() *MemoryStores {
-	return &MemoryStores{jobs: map[string]Job{}, byIdem: map[string]string{}, chunks: map[string]Chunk{}, failOn: map[string]error{}}
+	return &MemoryStores{jobs: map[string]Job{}, byIdem: map[string]string{}, chunks: map[string]Chunk{}, outbox: map[string]OutboxEntry{}, failOn: map[string]error{}}
 }
 
 // InjectFailure makes the next call to op ("claim","finish","stage","publish","chunks") fail.
@@ -281,5 +282,40 @@ func (s *MemoryStores) DeleteStaged(ctx context.Context, orgID, docID, versionID
 			}
 		}
 	}
+	return nil
+}
+
+// OutboxRelay methods make MemoryStores satisfy the processing.OutboxRelay
+// interface used by NewService's outbox parameter.
+
+func (s *MemoryStores) ListPending(ctx context.Context, limit int) ([]OutboxEntry, error) {
+	_ = ctx
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]OutboxEntry, 0, len(s.outbox))
+	for _, e := range s.outbox {
+		out = append(out, e)
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (s *MemoryStores) MarkDispatched(ctx context.Context, id string) error {
+	_ = ctx
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.outbox, id)
+	return nil
+}
+
+func (s *MemoryStores) MarkDone(ctx context.Context, id string, ok bool, detail string) error {
+	_ = ctx
+	_ = ok
+	_ = detail
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.outbox, id)
 	return nil
 }

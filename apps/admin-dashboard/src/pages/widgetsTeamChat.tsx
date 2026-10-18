@@ -209,10 +209,16 @@ export function TestChatPage({ orgId }: { orgId: string }) {
       </p>
       <h1>Test chat</h1>
       <p className="muted">Preview answers exactly as customers will receive them, including sources and fallbacks.</p>
+      {list !== null && list.length === 0 && (
+        <p role="status" className="muted">
+          No widgets are registered. Create one in <a href={`#/orgs/${orgId}/widgets`}>Widget settings</a> first.
+        </p>
+      )}
       <form onSubmit={(e) => void send(e)} aria-label="Test chat">
         <label>
           Widget
           <select value={widgetId} onChange={(e) => setWidgetId(e.target.value)} aria-label="Widget">
+            {list?.length === 0 && <option value="">No widgets available</option>}
             {(list || []).map((w) => (
               <option key={w.id} value={w.publicWidgetId}>
                 {w.displayName} ({w.active ? "active" : "disabled"})

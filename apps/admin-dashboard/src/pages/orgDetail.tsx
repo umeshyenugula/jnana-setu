@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../api/client";
 import { knowledge, widgets } from "../api/resources";
 import type { KnowledgeDocument, Widget } from "../api/types";
-import { validateTextInput, validateUploadFile } from "../lib/validation";
+import { validateTextInput, validateUploadFile, validateWidgetForm } from "../lib/validation";
 import { Empty, ErrorState, Layout, Loading, StatusBadge } from "../components/ui";
 import { useClient } from "./organizations";
 
@@ -149,6 +149,9 @@ export function WidgetsPage({ orgId }: { orgId: string }) {
   const client = useClient();
   const [items, setItems] = useState<Widget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState("");
+  const [originsText, setOriginsText] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function load() {
     try {
@@ -162,6 +165,28 @@ export function WidgetsPage({ orgId }: { orgId: string }) {
     void load();
   }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function createWidget(event: React.FormEvent) {
+    event.preventDefault();
+    const allowedOrigins = originsText.split("\n").map((origin) => origin.trim()).filter(Boolean);
+    const problem = validateWidgetForm(displayName, allowedOrigins);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await widgets.create(client, orgId, displayName.trim(), allowedOrigins);
+      setDisplayName("");
+      setOriginsText("");
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? `${err.code}: ${err.message}` : "Could not create widget.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Layout>
       <p>
@@ -169,6 +194,25 @@ export function WidgetsPage({ orgId }: { orgId: string }) {
       </p>
       <h1>Widget settings</h1>
       {error && <ErrorState message={error} onRetry={() => void load()} />}
+      <h2>Create widget</h2>
+      <form onSubmit={(event) => void createWidget(event)} aria-label="Create widget">
+        <label>
+          Display name
+          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} maxLength={120} />
+        </label>
+        <label>
+          Allowed origins (one per line)
+          <textarea
+            value={originsText}
+            onChange={(event) => setOriginsText(event.target.value)}
+            rows={3}
+            placeholder="http://localhost:5174"
+          />
+        </label>
+        <button type="submit" disabled={busy}>
+          {busy ? "Creating…" : "Create widget"}
+        </button>
+      </form>
       {items === null ? (
         <Loading />
       ) : items.length === 0 ? (

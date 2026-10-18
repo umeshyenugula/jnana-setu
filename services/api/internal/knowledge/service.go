@@ -220,6 +220,9 @@ func (s *Service) Get(ctx context.Context, orgID, userID, docID string) (Documen
 	if err != nil {
 		return Document{}, Version{}, err
 	}
+	if doc.DeletedAt != nil {
+		return Document{}, Version{}, &ServiceError{Code: "NOT_FOUND", Message: "document not found", Status: 404}
+	}
 	var current Version
 	if doc.CurrentVersionID != nil {
 		current, err = s.store.GetVersion(ctx, orgID, docID, *doc.CurrentVersionID)
