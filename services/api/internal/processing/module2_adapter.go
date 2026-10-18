@@ -34,6 +34,9 @@ func (a *Module2Adapter) FetchVersion(ctx context.Context, orgID, docID, version
 	if err != nil {
 		return VersionContent{}, &knowledge.ServiceError{Code: "STORAGE_ERROR", Message: "could not fetch version content", Status: 500}
 	}
+	if len(data) == 0 {
+		return VersionContent{}, &knowledge.ServiceError{Code: "STORAGE_ERROR", Message: "storage returned empty content for version " + versionID, Status: 500}
+	}
 	filename := ""
 	if ver.OriginalFilename != nil {
 		filename = *ver.OriginalFilename

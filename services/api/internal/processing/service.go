@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -61,11 +62,11 @@ type OutboxRelay interface {
 
 // Config tunes the pipeline. All knobs are env-configurable (see config).
 type Config struct {
-	Chunks       ChunkConfig
-	MaxAttempts  int
-	EmbedBatch   int
+	Chunks         ChunkConfig
+	MaxAttempts    int
+	EmbedBatch     int
 	ProcessTimeout time.Duration
-	QueueSize    int
+	QueueSize      int
 }
 
 func DefaultConfig() Config {
@@ -422,6 +423,7 @@ func (s *Service) processIndex(ctx context.Context, job Job) (Job, error) {
 			TokenCount: t.TokenCount, SourceMeta: t.Meta}
 	}
 	if err := s.chunks.StageChunks(ctx, records); err != nil {
+		slog.Error("processing.stage_chunks_failed", "error", err, "organization_id", job.OrganizationID, "document_id", job.DocumentID, "version_id", job.VersionID)
 		_ = s.chunks.DeleteStaged(ctx, job.OrganizationID, job.DocumentID, job.VersionID, false)
 		return s.fail(ctx, job, ErrDatabaseFailed, "could not stage chunks")
 	}

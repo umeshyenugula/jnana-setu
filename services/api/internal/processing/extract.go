@@ -467,6 +467,7 @@ func unescapeXML(s string) string {
 // normalizeWhitespace collapses runs of spaces/tabs, normalizes line endings,
 // keeps paragraph breaks, and trims. Structure (paragraphs) is preserved.
 func normalizeWhitespace(s string) string {
+	s = strings.ReplaceAll(s, "\x00", "")
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	paras := strings.Split(s, "\n")

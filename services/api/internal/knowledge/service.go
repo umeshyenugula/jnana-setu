@@ -276,8 +276,10 @@ func (s *Service) CreateVersion(ctx context.Context, orgID, userID, docID string
 	var contentType string
 	var payload []byte
 	var fname *string
+	var vf ValidatedFile // set for file uploads, reused for storage-path extension
 	if in.IsFile {
-		vf, verr := ValidateUpload(in.Filename, in.DeclaredContentType, in.Data)
+		var verr error
+		vf, verr = ValidateUpload(in.Filename, in.DeclaredContentType, in.Data)
 		if verr != nil {
 			return Version{}, Document{}, ProcessingRequest{}, verr
 		}
@@ -285,8 +287,6 @@ func (s *Service) CreateVersion(ctx context.Context, orgID, userID, docID string
 		payload = in.Data
 		fn := strings.TrimSpace(in.Filename)
 		fname = &fn
-		sum := vf.Checksum
-		_ = sum
 	} else {
 		if err := ValidateTextContent(in.ContentText); err != nil {
 			return Version{}, Document{}, ProcessingRequest{}, err
@@ -298,11 +298,11 @@ func (s *Service) CreateVersion(ctx context.Context, orgID, userID, docID string
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	// Use the validated file's extension for uploads; fall back to content-type
+	// mapping for text submissions.
 	ext := SafeObjectExtension(contentType)
 	if in.IsFile {
-		if v, verr := ValidateUpload(in.Filename, in.DeclaredContentType, in.Data); verr == nil {
-			ext = v.Extension
-		}
+		ext = vf.Extension
 	}
 	sp := storagePath(orgID, docID, next, ext)
 	if err := s.storage.Put(ctx, sp, contentType, payload); err != nil {

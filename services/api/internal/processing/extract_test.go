@@ -27,7 +27,9 @@ func minDOCX(paras ...string) []byte {
 	var sb strings.Builder
 	sb.WriteString(`<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>`)
 	for _, p := range paras {
-		sb.WriteString(`<w:p><w:r><w:t>` + p + `</w:t></w:r></w:p>`)
+		sb.WriteString(`<w:p><w:r><w:t>`)
+		sb.WriteString(p)
+		sb.WriteString(`</w:t></w:r></w:p>`)
 	}
 	sb.WriteString(`</w:body></w:document>`)
 	_, _ = fw.Write([]byte(sb.String()))
@@ -93,6 +95,12 @@ func TestExtractDOCX(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out.Text, "First para")
 	require.Contains(t, out.Text, "Second para")
+}
+
+func TestExtractDOCXRemovesNULBytes(t *testing.T) {
+	out, err := Extract(minDOCX("First\x00 para"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "a.docx")
+	require.NoError(t, err)
+	require.Equal(t, "First para", out.Text)
 }
 
 func TestExtractEmptyAndMalformed(t *testing.T) {
